@@ -1,15 +1,18 @@
 # Odoo 14 Community Integration Guide
 
-Dokumen ini adalah panduan teknis implementasi integrasi antara layanan FastAPI Face Attendance dengan Odoo 14 Community.
+Dokumen ini menjadi referensi teknis implementasi integrasi antara layanan
+FastAPI Face Attendance dengan Odoo 14 Community.
 
 ## 1. Tujuan Integrasi
 
 Integrasi Odoo bertujuan untuk:
 
-- memetakan identitas employee Odoo ke face identity di FastAPI
+- memetakan employee Odoo ke identitas wajah di FastAPI
 - menerima hasil matching check-in/check-out dari FastAPI
-- menyimpan evidence attachment foto (opsional, dapat diaktifkan bertahap)
-- menjaga konsistensi status attendance antara dua sistem
+- menerima koordinat GPS saat attendance
+- menerapkan validasi radius lokasi attendance yang dikelola di Odoo
+- menyimpan evidence attachment foto bila diperlukan
+- menjaga HR attendance di Odoo sebagai system of record
 
 ## 2. Arsitektur Integrasi
 
@@ -21,23 +24,42 @@ Integrasi Odoo bertujuan untuk:
 
 Arus data utama:
 
-1. Enrollment dimulai dari frontend/FastAPI.
+1. Enrollment dimulai dari frontend dan diproses di FastAPI.
 2. FastAPI menyimpan sample, template, dan metadata storage.
-3. Saat attendance sukses, FastAPI memanggil API Odoo untuk create/update attendance.
-4. Odoo menyimpan catatan HR attendance sebagai system of record untuk HR.
+3. Saat attendance sukses, FastAPI memanggil Odoo untuk create/update attendance.
+4. Odoo memvalidasi rule bisnis, termasuk radius GPS jika diaktifkan.
+5. Odoo menyimpan attendance final untuk kebutuhan HR dan reporting.
+
+## 2.1 Status Implementasi Backend Saat Ini
+
+Bagian yang sudah tersedia di repository `fastapi-fd`:
+
+- attendance request sudah mendukung field GPS
+- data GPS sudah disimpan pada tabel `face_attendance_attempt`
+- payload sinkronisasi ke Odoo sudah menyertakan konteks GPS
+- helper geolocation untuk hitung jarak meter sudah tersedia
+- attachment upload ke Odoo masih berupa placeholder service
+
+Bagian yang masih perlu diimplementasikan di Odoo:
+
+- model master lokasi attendance
+- validasi radius lokasi
+- endpoint/controller Odoo yang memutuskan accepted/rejected
+- penyimpanan hasil validasi lokasi pada attendance atau event log
 
 ## 3. Prasyarat Odoo 14
 
-- Odoo 14 Community aktif dengan modul `hr` dan `hr_attendance`
-- user teknis integrasi (service user) dengan akses minimum:
+- modul `hr` dan `hr_attendance` aktif
+- user teknis integrasi dengan akses minimum:
   - read `hr.employee`
   - create/read/write `hr.attendance`
-  - create/read `ir.attachment` (jika evidence foto diaktifkan)
-- endpoint Odoo dapat diakses dari host FastAPI (HTTPS direkomendasikan)
+  - create/read `ir.attachment` bila evidence foto diaktifkan
+- endpoint Odoo bisa diakses dari host FastAPI
+- HTTPS direkomendasikan untuk seluruh traffic integrasi
 
 ## 4. Konfigurasi yang Disarankan di FastAPI
 
-Tambahkan variabel environment berikut (contoh):
+Contoh environment variable:
 
 ```env
 ODOO_BASE_URL=https://odoo.example.com
@@ -59,11 +81,11 @@ Catatan:
 
 ### 5.1 Mapping Employee
 
-Gunakan table `face_employee_map` di FastAPI untuk referensi employee Odoo.
+Gunakan tabel `face_employee_map` di FastAPI untuk referensi employee Odoo.
 
-Rekomendasi field mapping:
+Rekomendasi mapping:
 
-- `face_employee_map.employee_id` -> `hr.employee.id` (string/ID)
+- `face_employee_map.employee_id` -> `hr.employee.id`
 - `face_employee_map.employee_code` -> `hr.employee.barcode` atau `identification_id`
 - `face_employee_map.employee_name` -> `hr.employee.name`
 
@@ -72,25 +94,49 @@ Rekomendasi field mapping:
 Saat FastAPI match sukses:
 
 - `action=checkin` -> create row baru di `hr.attendance`
-- `action=checkout` -> update `check_out` row attendance aktif employee
+- `action=checkout` -> update `check_out` pada attendance aktif employee
 
 Log sinkronisasi disimpan di `odoo_attendance_sync`.
 
-### 5.3 Evidence Attachment (Opsional)
+### 5.3 GPS dan Radius Attendance
+
+FastAPI saat ini menerima dan menyimpan field GPS berikut pada setiap attendance attempt:
+
+- `latitude`
+- `longitude`
+- `gps_accuracy_meters`
+- `gps_provider`
+
+Rekomendasi desain di Odoo 14:
+
+- buat master lokasi attendance
+- simpan titik pusat (`latitude`, `longitude`)
+- simpan radius yang diizinkan dalam meter
+- saat event masuk, hitung jarak dari titik absensi ke titik pusat
+- tolak attendance jika jarak melebihi radius yang diizinkan
+
+Field tambahan yang direkomendasikan untuk model lokasi:
+
+- `gps_accuracy_tolerance_meters`
+- `attendance_type` (`checkin`, `checkout`, `both`)
+- `site_code`
+- `note`
+
+### 5.4 Evidence Attachment
 
 Metadata evidence tersimpan di `face_sample_storage` dengan target `odoo`.
 
-Implementasi Odoo attachment:
+Implementasi attachment Odoo:
 
 - model `ir.attachment`
-- `res_model` -> `hr.attendance` (atau model custom)
-- `res_id` -> id attendance yang dibuat/update
+- `res_model` -> `hr.attendance` atau model custom log
+- `res_id` -> id record attendance/log terkait
 - `datas` -> base64 image
 - `mimetype` -> `image/png`
 
 ## 6. Opsi Implementasi di Odoo
 
-## Opsi A: Tanpa Modul Custom (Cepat)
+### Opsi A: Tanpa Modul Custom
 
 Gunakan XML-RPC/JSON-RPC langsung ke model standar:
 
@@ -101,20 +147,23 @@ Gunakan XML-RPC/JSON-RPC langsung ke model standar:
 Kelebihan:
 
 - implementasi cepat
-- minim maintenance modul Odoo
+- perubahan Odoo minimal
 
 Kekurangan:
 
-- logic bisnis tersebar di FastAPI
+- logic bisnis radius dan validasi tersebar
+- audit trail event lebih sulit dirapikan
 
-## Opsi B: Dengan Modul Custom Odoo (Direkomendasikan)
+### Opsi B: Dengan Modul Custom Odoo
 
-Buat modul Odoo misalnya `face_attendance_bridge`:
+Disarankan membuat modul misalnya `face_attendance_bridge`.
 
-- endpoint controller internal Odoo untuk inbound event
-- centralisasi business rule di Odoo
-- validasi duplicate checkin/checkout di server Odoo
-- audit trail tambahan
+Tanggung jawab modul:
+
+- menyediakan endpoint inbound attendance
+- memvalidasi radius GPS
+- memvalidasi duplicate checkin/checkout
+- menyimpan audit trail event
 
 Struktur modul minimal:
 
@@ -125,16 +174,17 @@ face_attendance_bridge/
 │   └── api.py
 ├── models/
 │   ├── face_event_log.py
-│   └── hr_attendance_inherit.py
+│   ├── hr_attendance_inherit.py
+│   └── attendance_location.py
 ├── security/
 │   └── ir.model.access.csv
 └── data/
     └── ir_config_parameter.xml
 ```
 
-## 7. Spesifikasi API Kontrak (FastAPI -> Odoo)
+## 7. Spesifikasi API Kontrak FastAPI ke Odoo
 
-Gunakan payload kontrak stabil berikut:
+Contoh payload:
 
 ```json
 {
@@ -145,6 +195,10 @@ Gunakan payload kontrak stabil berikut:
   "similarity": 0.92,
   "device_code": "CAM-001",
   "quality_score": 3500.12,
+  "latitude": -6.1753924,
+  "longitude": 106.8271528,
+  "gps_accuracy_meters": 8.75,
+  "gps_provider": "browser",
   "photo": {
     "local_url": "/uploads/local/EMP001/sample_10.png",
     "object_url": "https://face.example.com/uploads/object/EMP001/sample_10.png",
@@ -153,14 +207,36 @@ Gunakan payload kontrak stabil berikut:
 }
 ```
 
-Respons yang disarankan dari Odoo:
+Contoh response sukses:
 
 ```json
 {
   "success": true,
   "attendance_id": 4567,
   "status": "created",
-  "message": "Check-in recorded"
+  "message": "Check-in recorded",
+  "location_validation": {
+    "valid": true,
+    "distance_meters": 12.4,
+    "allowed_radius_meters": 50,
+    "location_name": "Head Office"
+  }
+}
+```
+
+Contoh response jika lokasi di luar radius:
+
+```json
+{
+  "success": false,
+  "status": "rejected",
+  "message": "Location outside allowed radius",
+  "location_validation": {
+    "valid": false,
+    "distance_meters": 143.2,
+    "allowed_radius_meters": 50,
+    "location_name": "Head Office"
+  }
 }
 ```
 
@@ -168,8 +244,43 @@ Respons yang disarankan dari Odoo:
 
 - checkin hanya jika tidak ada attendance open
 - checkout hanya jika ada attendance open
-- duplicate window (misalnya 30-120 detik) untuk debounce
-- idempotency berdasarkan `event_id` untuk menghindari double post
+- duplicate window untuk debounce
+- idempotency berdasarkan `event_id`
+- radius validation berdasarkan lokasi attendance Odoo
+- optional tolerance berdasarkan `gps_accuracy_meters`
+
+Contoh rule radius:
+
+1. tentukan lokasi attendance aktif untuk employee atau site
+2. hitung jarak antara GPS request dan titik pusat lokasi Odoo
+3. jika `distance_meters <= allowed_radius_meters`, attendance boleh lanjut
+4. jika lebih besar, return error validasi lokasi
+
+Rekomendasi model custom:
+
+`face.attendance.location`
+
+- `name`
+- `latitude`
+- `longitude`
+- `allowed_radius_meters`
+- `company_id`
+- `active`
+
+Rekomendasi model log event:
+
+`face.attendance.event.log`
+
+- `event_id`
+- `employee_id`
+- `attendance_id`
+- `latitude`
+- `longitude`
+- `gps_accuracy_meters`
+- `distance_meters`
+- `radius_allowed_meters`
+- `location_validation_status`
+- `raw_payload`
 
 ## 9. Keamanan Integrasi
 
@@ -177,19 +288,19 @@ Minimal:
 
 - HTTPS end-to-end
 - API key atau JWT antar FastAPI dan Odoo endpoint custom
-- rotate credential service user berkala
+- rotate credential service user
 - whitelist source IP jika memungkinkan
 
 Rekomendasi tambahan:
 
-- sign payload (HMAC)
-- audit log request/response (tanpa secret)
+- sign payload dengan HMAC
+- audit log request/response tanpa menyimpan secret
 
 ## 10. Error Handling dan Retry
 
 Klasifikasi error:
 
-- 4xx: error data/validasi, tidak perlu retry agresif
+- 4xx: error data atau validasi, tidak perlu retry agresif
 - 5xx/network timeout: retry dengan exponential backoff
 
 Skema retry yang disarankan:
@@ -201,19 +312,22 @@ Skema retry yang disarankan:
 
 ## 11. Rekonsiliasi Data
 
-Jalankan job periodik (mis. tiap 15 menit):
+Jalankan job periodik, misalnya tiap 15 menit:
 
-- ambil `odoo_attendance_sync` status failed/pending
+- ambil `odoo_attendance_sync` status failed atau pending
 - replay sinkronisasi berdasarkan `attempt_id`
-- update status sukses/gagal akhir
+- update status sukses atau gagal akhir
 
 ## 12. Checklist UAT Integrasi Odoo
 
 - employee valid dapat checkin
 - employee valid dapat checkout
 - duplicate checkin ditolak sesuai rule
+- attendance dengan GPS di dalam radius diterima
+- attendance dengan GPS di luar radius ditolak
+- attendance dengan akurasi GPS buruk diperlakukan sesuai rule bisnis
 - attendance di Odoo muncul sesuai timezone
-- attachment foto terbentuk (jika enabled)
+- attachment foto terbentuk bila enabled
 - kegagalan Odoo menghasilkan log gagal di FastAPI
 - replay job dapat memperbaiki status gagal
 
@@ -221,29 +335,34 @@ Jalankan job periodik (mis. tiap 15 menit):
 
 Tahap 1:
 
-- sinkronisasi checkin/checkout tanpa attachment
+- sinkronisasi checkin/checkout
+- simpan payload GPS
+- tampilkan hasil radius validation
 
 Tahap 2:
 
 - aktifkan attachment foto
-- aktifkan retry + reprocess job
+- aktifkan retry dan reprocess job
 
 Tahap 3:
 
-- modul custom Odoo dengan endpoint bridge + idempotency server-side
+- modul custom Odoo dengan endpoint bridge
+- idempotency server-side
+- dashboard audit event lokasi
 
 ## 14. Catatan Praktis untuk Kode Saat Ini
 
-Pada repository ini, method upload attachment di service Odoo masih placeholder.
-
-File terkait:
+File backend yang terkait langsung:
 
 - `services/odoo_service.py`
+- `services/geolocation_service.py`
+- `routes/attendance.py`
 - `routes/face_enrollment.py`
-- `models/face_attendance.py` (table `face_sample_storage`)
+- `models/face_attendance.py`
 
 Langkah lanjutan paling dekat:
 
-1. ganti placeholder `upload_face_attachment` dengan call XML-RPC/JSON-RPC Odoo nyata
-2. ikat `odoo_attachment_id` ke `hr.attendance` setelah checkin/checkout sukses
-3. tambahkan worker retry untuk `odoo_attendance_sync`
+1. ganti placeholder `upload_face_attachment` dengan XML-RPC/JSON-RPC Odoo nyata
+2. tambahkan endpoint atau modul radius validation di Odoo
+3. ikat `odoo_attachment_id` ke `hr.attendance` atau event log
+4. tambahkan worker retry untuk `odoo_attendance_sync`

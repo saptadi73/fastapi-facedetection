@@ -7,6 +7,7 @@ Dokumen ini adalah panduan implementasi frontend Vue.js untuk integrasi dengan F
 Frontend bertanggung jawab untuk:
 
 - capture stream kamera
+- capture koordinat GPS user/device saat attendance
 - melakukan quality gate ringan sebelum upload
 - kirim image ke endpoint enrollment/attendance
 - menampilkan feedback real-time ke user
@@ -60,6 +61,8 @@ VITE_CAPTURE_FORMAT=image/png
 VITE_CAPTURE_QUALITY=0.9
 VITE_SAMPLE_MIN_COUNT=5
 VITE_REQUEST_TIMEOUT_MS=15000
+VITE_GEOLOCATION_ENABLE_HIGH_ACCURACY=true
+VITE_GEOLOCATION_TIMEOUT_MS=10000
 ```
 
 ## 5. Kontrak API yang Digunakan Frontend
@@ -109,13 +112,52 @@ Data penting dari `enroll/sample` response:
 ## 7. Alur Attendance di Frontend
 
 1. User pilih aksi checkin/checkout.
-2. Capture satu frame berkualitas baik.
-3. Kirim ke endpoint attendance.
-4. Tampilkan hasil:
+2. Ambil koordinat GPS via browser geolocation API.
+3. Capture satu frame berkualitas baik.
+4. Kirim image + koordinat GPS ke endpoint attendance.
+5. Tampilkan hasil:
    - matched / not matched
    - employee_id
    - similarity
    - status
+  - status lokasi jika dikembalikan sistem Odoo/backend
+
+Rekomendasi flow bisnis frontend:
+
+- jangan izinkan submit attendance jika permission lokasi ditolak
+- jangan izinkan submit jika `coords` belum tersedia
+- jika akurasi terlalu buruk, tampilkan peringatan dan minta user retry
+- kirim metadata GPS apa adanya ke backend, biarkan Odoo menentukan valid/tidak berdasarkan radius
+
+Payload attendance yang direkomendasikan dari frontend:
+
+```json
+{
+  "device_code": "CAM-001",
+  "image_base64": "...",
+  "latitude": -6.1753924,
+  "longitude": 106.8271528,
+  "gps_accuracy_meters": 8.75,
+  "gps_provider": "browser"
+}
+```
+
+Contoh field response attendance yang harus di-handle frontend:
+
+```json
+{
+  "attempt_id": 3,
+  "action": "checkin",
+  "matched": true,
+  "employee_id": "EMP001",
+  "similarity": 0.98,
+  "quality_score": 3200.5,
+  "status": "success",
+  "latitude": -6.1753924,
+  "longitude": 106.8271528,
+  "gps_accuracy_meters": 8.75
+}
+```
 
 ## 8. Implementasi Camera Composable (Konsep)
 
@@ -131,6 +173,32 @@ Praktik penting:
 - set `video.playsInline = true`
 - request resolusi moderat (misal 640x480) untuk latency rendah
 - cleanup stream pada unmount
+
+## 8.1 Implementasi Geolocation Composable (Konsep)
+
+`useGeolocation.ts` sebaiknya menyediakan:
+
+- `requestLocation()`
+- `clearLocation()`
+- state `coords`, `accuracy`, `loading`, `error`
+
+Gunakan `navigator.geolocation.getCurrentPosition()` dengan opsi:
+
+- `enableHighAccuracy: true`
+- `timeout: 10000`
+- `maximumAge: 0`
+
+Fallback UX yang disarankan:
+
+- jika GPS gagal didapat, tampilkan alasan dan blok attendance
+- jika akurasi terlalu buruk, minta user ulangi deteksi lokasi
+- tampilkan nilai akurasi aktual agar user paham kenapa attendance ditolak
+
+Threshold UX yang disarankan:
+
+- `<= 20m`: sangat baik
+- `21m - 50m`: masih bisa dipakai, beri warning ringan
+- `> 50m`: minta user ambil ulang lokasi
 
 ## 9. Quality Gate di Frontend (Ringan)
 
@@ -161,6 +229,9 @@ Catatan:
 - lastResult
 - loading
 - error
+- location
+- locationPermission
+- locationAccuracy
 
 ## 11. Error Handling UX
 
@@ -170,11 +241,14 @@ Kelompokkan error:
 - not found (404): data employee/perangkat tidak ditemukan
 - server error (500): tampilkan fallback + tombol retry
 - network error: auto-retry terbatas + notifikasi
+- geolocation denied: tampilkan instruksi aktivasi permission lokasi
+- geolocation timeout: beri opsi retry lokasi
 
 Saran UX:
 
 - tampilkan toast + area detail
 - simpan `request_id/event_id` jika ada, agar mudah tracing
+- tampilkan badge lokasi: `GPS ready`, `GPS denied`, `Low accuracy`
 
 ## 12. Strategi Retry Frontend
 
@@ -196,7 +270,9 @@ Untuk endpoint sample/attendance:
 - halaman enrollment
 - halaman attendance
 - device selector kamera
+- permission request untuk kamera dan lokasi
 - indikator kualitas real-time
+- indikator kualitas GPS / akurasi lokasi
 - progress accepted samples
 - hasil attendance + reason jika gagal
 - log/history viewer sederhana
@@ -228,6 +304,29 @@ export interface EnrollmentSampleData {
     odoo_attachment_id: string | null
   }
 }
+
+export interface AttendanceRequestPayload {
+  device_code?: string
+  image_base64: string
+  latitude?: number
+  longitude?: number
+  gps_accuracy_meters?: number
+  gps_provider?: string
+}
+
+export interface AttendanceResultData {
+  attempt_id: number
+  action: 'checkin' | 'checkout'
+  matched: boolean
+  employee_id: string | null
+  similarity: number
+  quality_score: number
+  status: string
+  latitude: number | null
+  longitude: number | null
+  gps_accuracy_meters: number | null
+  gps_provider?: string | null
+}
 ```
 
 ## 16. Testing Frontend yang Disarankan
@@ -244,6 +343,8 @@ E2E test:
 - enrollment insufficient sample
 - attendance match success
 - attendance not matched
+- attendance gagal karena GPS permission denied
+- attendance gagal karena lokasi di luar radius
 
 ## 17. Integrasi dengan Odoo UI (Opsional)
 
@@ -258,7 +359,32 @@ Jika frontend ini di-embed atau terhubung ke Odoo:
 Backend saat ini sudah mengembalikan metadata storage pada endpoint
 `enroll/sample`.
 
+Backend attendance juga sudah menerima dan mengembalikan field GPS:
+
+- `latitude`
+- `longitude`
+- `gps_accuracy_meters`
+- `gps_provider`
+
 Frontend cukup memanfaatkan field tersebut untuk:
 
 - preview quick link image (`local_url` / `object_url`)
 - menampilkan status attachment Odoo (`odoo_attachment_id`)
+- menampilkan bukti koordinat yang dikirim saat attendance
+- menyiapkan UX untuk hasil validasi radius dari Odoo pada tahap integrasi berikutnya
+
+## 19. Status Implementasi Backend Saat Ini
+
+Hal yang sudah tersedia di backend:
+
+- endpoint attendance menerima `latitude`, `longitude`, `gps_accuracy_meters`, `gps_provider`
+- response attendance mengembalikan field GPS tersebut
+- history attendance juga mengembalikan data GPS
+- endpoint sample enrollment mengembalikan metadata storage image
+
+Implikasi untuk frontend:
+
+- frontend tidak perlu menghitung radius sendiri
+- frontend cukup mengambil GPS terbaik yang tersedia dari browser/device
+- frontend perlu menampilkan hasil validasi lokasi jika nanti dikembalikan Odoo
+- frontend perlu menangani permission kamera dan lokasi sebagai syarat utama attendance

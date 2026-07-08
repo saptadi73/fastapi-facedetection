@@ -92,6 +92,10 @@ def test_enrollment_and_checkin_flow(client):
         json={
             "device_code": "CAM-T1",
             "image_base64": image_base64,
+            "latitude": -6.2000001,
+            "longitude": 106.8166662,
+            "gps_accuracy_meters": 12.5,
+            "gps_provider": "browser",
         },
     )
     assert response.status_code == 200
@@ -99,3 +103,6 @@ def test_enrollment_and_checkin_flow(client):
     assert payload["data"]["matched"] is True
     assert payload["data"]["employee_id"] == "EMP-T1"
     assert payload["data"]["status"] == "success"
+    assert payload["data"]["latitude"] == -6.2000001
+    assert payload["data"]["longitude"] == 106.8166662
+    assert payload["data"]["gps_accuracy_meters"] == 12.5

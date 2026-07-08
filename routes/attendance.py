@@ -19,6 +19,7 @@ from models.face_attendance import (
 from schemas.attendance import AttendanceRequest
 from services.embedding_service import embedding_service
 from services.faiss_service import faiss_service
+from services.geolocation_service import geolocation_service
 from services.image_service import image_service
 from services.mediapipe_service import mediapipe_service
 from services.odoo_service import odoo_service
@@ -48,10 +49,20 @@ def _run_attendance(action: str, payload: AttendanceRequest, db: Session):
         )
 
     device = _resolve_device(db, payload.device_code)
+    gps_payload = geolocation_service.normalize(
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+        gps_accuracy_meters=payload.gps_accuracy_meters,
+        gps_provider=payload.gps_provider,
+    )
     attempt = FaceAttendanceAttempt(
         device_id=device.id if device else None,
         action=action,
         captured_at=payload.captured_at or datetime.now(timezone.utc),
+        latitude=gps_payload.latitude,
+        longitude=gps_payload.longitude,
+        gps_accuracy_meters=gps_payload.gps_accuracy_meters,
+        gps_provider=gps_payload.gps_provider,
         face_count=face.face_count,
         quality_score=(quality.blur_score + quality.brightness_score) / 2,
         status="pending",
@@ -86,7 +97,21 @@ def _run_attendance(action: str, payload: AttendanceRequest, db: Session):
         employee = db.get(FaceEmployeeMap, match.employee_map_id)
         if employee is not None:
             employee_id = employee.employee_id
-            sync_result = odoo_service.sync_attendance(employee_id=employee.employee_id, action=action)
+            sync_result = odoo_service.sync_attendance(
+                employee_id=employee.employee_id,
+                action=action,
+                attendance_context={
+                    "attempt_id": attempt.id,
+                    "device_code": payload.device_code,
+                    "captured_at": attempt.captured_at.isoformat() if attempt.captured_at else None,
+                    "similarity": recognition.similarity,
+                    "quality_score": attempt.quality_score,
+                    "latitude": attempt.latitude,
+                    "longitude": attempt.longitude,
+                    "gps_accuracy_meters": attempt.gps_accuracy_meters,
+                    "gps_provider": attempt.gps_provider,
+                },
+            )
             sync = OdooAttendanceSync(
                 employee_map_id=employee.id,
                 attempt_id=attempt.id,
@@ -113,6 +138,9 @@ def _run_attendance(action: str, payload: AttendanceRequest, db: Session):
             "similarity": recognition.similarity,
             "quality_score": attempt.quality_score,
             "status": attempt.status,
+            "latitude": attempt.latitude,
+            "longitude": attempt.longitude,
+            "gps_accuracy_meters": attempt.gps_accuracy_meters,
         },
     )
 
@@ -160,6 +188,10 @@ def history(
                 "matched": bool(recognition.matched) if recognition else False,
                 "employee_id": mapped_employee_id,
                 "similarity": float(recognition.similarity) if recognition else 0.0,
+                "latitude": attempt.latitude,
+                "longitude": attempt.longitude,
+                "gps_accuracy_meters": attempt.gps_accuracy_meters,
+                "gps_provider": attempt.gps_provider,
             }
         )
 

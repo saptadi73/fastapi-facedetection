@@ -128,20 +128,22 @@ face_attendance_attempt
 # Workflow Attendance
 
 1.  Capture webcam.
-2.  Frontend preprocessing.
-3.  Upload ke FastAPI.
-4.  OpenCV preprocessing ulang.
-5.  MediaPipe mendeteksi wajah.
-6.  Validasi:
+2.  Ambil koordinat GPS device/browser.
+3.  Frontend preprocessing.
+4.  Upload image + GPS ke FastAPI.
+5.  OpenCV preprocessing ulang.
+6.  MediaPipe mendeteksi wajah.
+7.  Validasi:
     -   hanya 1 wajah
     -   blur
     -   brightness
     -   pose
-7.  Generate embedding.
-8.  Cari kandidat menggunakan FAISS.
-9.  Jika similarity memenuhi threshold:
+8.  Generate embedding.
+9.  Cari kandidat menggunakan FAISS.
+10. Jika similarity memenuhi threshold:
     -   create/update attendance Odoo.
-10. Simpan audit log.
+11. Kirim GPS ke Odoo untuk validasi radius lokasi.
+12. Simpan audit log.
 
 ------------------------------------------------------------------------
 
@@ -206,6 +208,12 @@ face_attendance_attempt
 -   orkestrasi simpan ke local + object + Odoo attachment
 -   kembalikan metadata storage untuk disimpan ke database
 
+## geolocation_service
+
+-   normalisasi payload GPS attendance
+-   helper hitung jarak meter antar koordinat
+-   fondasi validasi radius attendance
+
 ------------------------------------------------------------------------
 
 # REST API
@@ -227,6 +235,19 @@ POST /api/v1/attendance/checkin
 POST /api/v1/attendance/checkout
 
 GET /api/v1/attendance/history
+
+Contoh payload attendance:
+
+``` json
+{
+    "device_code": "CAM-001",
+    "image_base64": "<base64>",
+    "latitude": -6.1753924,
+    "longitude": 106.8271528,
+    "gps_accuracy_meters": 8.75,
+    "gps_provider": "browser"
+}
+```
 
 ## Device
 
@@ -307,8 +328,10 @@ Dokumen ini sekarang merefleksikan implementasi aktual pada repository
 
 ``` text
 fastapi-fd/
+├── .gitignore
 ├── main.py
 ├── requirements.txt
+├── constraints.txt
 ├── alembic.ini
 ├── config/
 │   ├── database.py
@@ -326,7 +349,11 @@ fastapi-fd/
 │   ├── embedding_service.py
 │   ├── faiss_service.py
 │   ├── attendance_service.py
+│   ├── geolocation_service.py
 │   ├── odoo_service.py
+│   ├── local_storage_service.py
+│   ├── object_storage_service.py
+│   ├── sample_media_storage_service.py
 │   └── camera_service.py
 ├── routes/
 │   ├── face_enrollment.py
@@ -340,10 +367,19 @@ fastapi-fd/
 │   └── versions/
 │       ├── 20260708_0001_create_face_attendance_tables.py
 │       ├── 20260708_0002_alter_face_sample_image_path_to_text.py
-│       └── 20260708_0003_create_face_sample_storage_table.py
+│       ├── 20260708_0003_create_face_sample_storage_table.py
+│       └── 20260708_0004_add_gps_fields_to_attendance_attempt.py
+├── scripts/
+│   └── setup_env.ps1
+├── docs/
+│   ├── FastAPI_Face_Attendance_Architecture.md
+│   ├── Odoo14_Community_Integration_Guide.md
+│   ├── Frontend_Vue_Implementation_Guide.md
+│   ├── Dependency_Troubleshooting.md
+│   └── Dependency_Changelog.md
 └── tests/
-        ├── conftest.py
-        └── test_api_smoke.py
+    ├── conftest.py
+    └── test_api_smoke.py
 ```
 
 ## Standar JSON Response
@@ -369,6 +405,12 @@ error 422/HTTPException/500 mengikuti format yang konsisten.
     - object-style storage URL (`uploads/object/...`)
     - Odoo attachment (placeholder service)
 - Metadata storage disimpan di tabel `face_sample_storage`.
+- Attendance sekarang mendukung penyimpanan GPS (`latitude`, `longitude`,
+    `gps_accuracy_meters`, `gps_provider`) pada `face_attendance_attempt`.
+- Data GPS ini dimaksudkan untuk dikirim ke Odoo 14 agar validasi radius
+    attendance bisa diterapkan di sisi Odoo.
+- Geolocation helper tersedia di `services/geolocation_service.py` untuk
+    kebutuhan perhitungan jarak/radius di tahap lanjutan.
 - Enrollment embedding diambil dari sample valid terbaru, sehingga source
     embedding enrollment dan attendance konsisten.
 - Attendance history menyimpan audit trail match success/failed.

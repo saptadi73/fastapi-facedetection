@@ -2,6 +2,7 @@ from services.attendance_service import attendance_service
 from services.camera_service import camera_service
 from services.embedding_service import embedding_service
 from services.faiss_service import faiss_service
+from services.geolocation_service import geolocation_service
 from services.image_service import image_service
 from services.local_storage_service import local_storage_service
 from services.mediapipe_service import mediapipe_service
@@ -14,6 +15,7 @@ __all__ = [
     "mediapipe_service",
     "embedding_service",
     "faiss_service",
+    "geolocation_service",
     "attendance_service",
     "odoo_service",
     "camera_service",

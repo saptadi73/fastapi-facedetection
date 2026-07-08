@@ -25,12 +25,18 @@ class OdooService:
     HTTP integration placeholder for Odoo API.
     """
 
-    def sync_attendance(self, employee_id: str, action: str) -> OdooSyncResult:
+    def sync_attendance(
+        self,
+        employee_id: str,
+        action: str,
+        attendance_context: Optional[dict] = None,
+    ) -> OdooSyncResult:
         fake_id = f"odoo-{employee_id}-{int(datetime.now(timezone.utc).timestamp())}"
         response = {
             "employee_id": employee_id,
             "action": action,
             "synced_at": datetime.now(timezone.utc).isoformat(),
+            "attendance_context": attendance_context or {},
         }
         return OdooSyncResult(success=True, action=action, odoo_attendance_id=fake_id, response=response)
 
