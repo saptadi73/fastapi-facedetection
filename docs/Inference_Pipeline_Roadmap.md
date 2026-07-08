@@ -140,11 +140,44 @@ Strategi rollout yang disarankan:
 
 ## 6. Rekomendasi Infrastruktur
 
-Minimum untuk production inference CPU:
+### Review Kebutuhan AVX untuk Go-Live Saat Ini
+
+Berdasarkan implementasi dan dependency yang ada saat ini, aplikasi belum wajib memakai server CPU AVX/AVX2 untuk bisa live.
+
+Alasannya:
+
+- `requirements.txt` belum memakai library inferensi native seperti MediaPipe, FAISS, OpenCV, ONNX Runtime, TensorFlow, PyTorch, atau NumPy.
+- `services/mediapipe_service.py` masih placeholder berbasis ukuran gambar, bukan MediaPipe native.
+- `services/embedding_service.py` masih memakai `hashlib` dan operasi list Python untuk menghasilkan embedding deterministik, bukan model neural network.
+- `services/faiss_service.py` masih in-memory nearest-neighbor sederhana, bukan FAISS native index.
+- quality check gambar masih memakai Pillow (`pillow`), yang tidak menetapkan AVX sebagai syarat deploy aplikasi.
+
+Kesimpulan operasional:
+
+- Untuk go-live terbatas dengan pipeline placeholder saat ini, server non-AVX masih bisa digunakan selama Python dan dependency yang dipakai berhasil terinstal.
+- Risiko utamanya bukan kompatibilitas AVX, melainkan akurasi biometrik: hasil face detection, embedding, dan matching saat ini belum layak dianggap sebagai verifikasi wajah production-grade.
+- Jika aplikasi dipakai untuk attendance riil sebelum Fase 1-3 selesai, sebaiknya diposisikan sebagai pilot/internal UAT atau digabung dengan kontrol tambahan seperti validasi device, GPS, approval HR, atau audit log.
+
+Kapan AVX mulai perlu dipertimbangkan:
+
+- saat Fase 1 mengaktifkan MediaPipe real detection
+- saat Fase 2 memakai embedding model native/optimized
+- saat Fase 3 mengganti pencarian in-memory menjadi FAISS native
+- saat target latency dan concurrency mulai ketat
+
+Pada fase tersebut, beberapa wheel/library native dapat membutuhkan instruksi CPU tertentu atau jauh lebih stabil/cepat di CPU modern. Karena itu, sebelum upgrade pipeline inferensi, lakukan benchmark dan install test di tipe server target.
+
+Minimum yang direkomendasikan untuk production inference CPU setelah pipeline real aktif:
 
 - CPU modern dengan AVX2 + FMA (disarankan)
 - RAM minimal 8-16 GB (tergantung ukuran template/index)
 - storage SSD
+
+Catatan keputusan:
+
+- Status sekarang: AVX/AVX2 belum menjadi syarat wajib aplikasi.
+- Status setelah real inference aktif: AVX2 + FMA direkomendasikan kuat sebagai baseline server production.
+- Keputusan final hardware harus mengikuti hasil benchmark model dan library yang benar-benar dipilih pada Fase 1-3.
 
 Saat volume tinggi:
 
