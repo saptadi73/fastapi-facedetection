@@ -388,3 +388,7 @@ Implikasi untuk frontend:
 - frontend cukup mengambil GPS terbaik yang tersedia dari browser/device
 - frontend perlu menampilkan hasil validasi lokasi jika nanti dikembalikan Odoo
 - frontend perlu menangani permission kamera dan lokasi sebagai syarat utama attendance
+
+Roadmap migrasi inferensi backend yang menjadi acuan frontend ada di:
+
+- `docs/Inference_Pipeline_Roadmap.md`

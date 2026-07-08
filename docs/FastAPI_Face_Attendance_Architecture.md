@@ -476,3 +476,4 @@ Dokumentasi implementasi lanjutan:
 
 - `docs/Odoo14_Community_Integration_Guide.md`
 - `docs/Frontend_Vue_Implementation_Guide.md`
+- `docs/Inference_Pipeline_Roadmap.md`

@@ -366,3 +366,7 @@ Langkah lanjutan paling dekat:
 2. tambahkan endpoint atau modul radius validation di Odoo
 3. ikat `odoo_attachment_id` ke `hr.attendance` atau event log
 4. tambahkan worker retry untuk `odoo_attendance_sync`
+
+Roadmap migrasi inferensi end-to-end tersedia di:
+
+- `docs/Inference_Pipeline_Roadmap.md`
