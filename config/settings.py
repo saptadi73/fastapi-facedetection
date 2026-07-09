@@ -27,6 +27,18 @@ class Settings(BaseSettings):
     object_upload_dir: str = str(BASE_DIR / "uploads" / "object")
     object_public_base_url: str = "http://127.0.0.1:8000"
 
+    face_recognition_threshold: float = 0.82
+    face_min_detection_confidence: float = 0.7
+    face_min_blur_score: float = 20.0
+    face_min_brightness_score: float = 40.0
+    face_max_brightness_score: float = 220.0
+    face_embedding_provider: str = "visual"
+    face_onnx_model_path: str = ""
+    face_onnx_input_size: int = 112
+    face_onnx_input_name: str = ""
+    face_onnx_output_name: str = ""
+    face_onnx_execution_providers: str = "CPUExecutionProvider"
+
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,
         env_file_encoding="utf-8",

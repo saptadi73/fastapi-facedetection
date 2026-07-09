@@ -23,6 +23,9 @@ class AttendanceEventResponse(BaseModel):
     employee_id: Optional[str] = None
     similarity: float
     quality_score: float
+    embedding_provider: Optional[str] = None
+    odoo_sync_status: Optional[str] = None
+    odoo_attendance_id: Optional[str] = None
     status: str
     latitude: Optional[float] = None
     longitude: Optional[float] = None

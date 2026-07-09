@@ -16,6 +16,7 @@ from schemas.face_enrollment import (
 )
 from services.embedding_service import embedding_service
 from services.faiss_service import faiss_service
+from services.face_quality_service import face_quality_service
 from services.image_service import image_service
 from services.local_storage_service import local_storage_service
 from services.mediapipe_service import mediapipe_service
@@ -67,13 +68,12 @@ def upload_enrollment_sample(payload: EnrollmentSampleRequest, db: Session = Dep
     if employee is None:
         return error_response(message="Employee not found", status_code=404, code="EMPLOYEE_NOT_FOUND")
 
-    enrollment = db.scalar(
-        select(FaceEnrollment)
-        .where(FaceEnrollment.employee_map_id == employee.id)
-        .order_by(desc(FaceEnrollment.id))
-        .limit(1)
-    )
-    if enrollment is None or enrollment.status != "in_progress":
+    enrollment = db.query(FaceEnrollment).filter(
+        FaceEnrollment.employee_map_id == employee.id,
+        FaceEnrollment.status == "in_progress"
+    ).order_by(desc(FaceEnrollment.id)).first()
+
+    if enrollment is None:
         return error_response(
             message="No active enrollment session",
             status_code=400,
@@ -84,13 +84,7 @@ def upload_enrollment_sample(payload: EnrollmentSampleRequest, db: Session = Dep
     image = image_service.open_image(image_bytes)
     quality = image_service.evaluate_quality(image)
     face = mediapipe_service.detect(image.width, image.height)
-
-    accepted = (
-        face.face_count == 1
-        and face.confidence >= 0.7
-        and quality.blur_score >= 20
-        and 40 <= quality.brightness_score <= 220
-    )
+    quality_decision = face_quality_service.evaluate(face=face, quality=quality)
 
     sample = FaceSample(
         enrollment_id=enrollment.id,
@@ -99,7 +93,7 @@ def upload_enrollment_sample(payload: EnrollmentSampleRequest, db: Session = Dep
         brightness_score=quality.brightness_score,
         face_count=face.face_count,
         detector_confidence=face.confidence,
-        accepted=accepted,
+        accepted=quality_decision.accepted,
         captured_at=datetime.now(timezone.utc),
     )
     db.add(sample)
@@ -153,6 +147,7 @@ def upload_enrollment_sample(payload: EnrollmentSampleRequest, db: Session = Dep
         data={
             "sample_id": sample.id,
             "accepted": sample.accepted,
+            "reason_codes": quality_decision.reason_codes,
             "blur_score": sample.blur_score,
             "brightness_score": sample.brightness_score,
             "face_count": sample.face_count,
@@ -198,44 +193,60 @@ def finish_enrollment(payload: EnrollmentFinishRequest, db: Session = Depends(ge
             data={"accepted_samples": accepted_samples},
         )
 
-    last_sample = db.scalar(
+    valid_samples = db.scalars(
         select(FaceSample)
         .where(
             FaceSample.enrollment_id == enrollment.id,
             FaceSample.accepted.is_(True),
         )
-        .order_by(desc(FaceSample.id))
-        .limit(1)
-    )
-    if last_sample is None or not last_sample.image_path:
+        .order_by(FaceSample.id)
+    ).all()
+    if not valid_samples:
         return error_response(
             message="No valid accepted sample found for embedding",
             status_code=422,
             code="NO_VALID_SAMPLE",
         )
 
-    try:
-        sample_bytes = local_storage_service.read_image(last_sample.image_path)
-    except Exception:
-        # Backward compatibility for old records that still contain base64 payload.
-        sample_bytes = image_service.decode_base64(last_sample.image_path)
-    embedding = embedding_service.generate_embedding(sample_bytes)
-    template = FaceTemplate(
-        employee_map_id=employee.id,
-        embedding_vector=embedding,
-        vector_norm=1.0,
-        version=1,
-        is_active=True,
-    )
+    db.query(FaceTemplate).filter(FaceTemplate.employee_map_id == employee.id).update({"is_active": False})
+    faiss_service.remove_embedding(employee.id)
 
-    faiss_service.add_embedding(employee.id, embedding)
+    created_templates: list[FaceTemplate] = []
+    for sample in valid_samples:
+        if not sample.image_path:
+            continue
+        try:
+            sample_bytes = local_storage_service.read_image(sample.image_path)
+        except Exception:
+            # Backward compatibility for old records that still contain base64 payload.
+            sample_bytes = image_service.decode_base64(sample.image_path)
+        embedding = embedding_service.generate_embedding(sample_bytes)
+        template = FaceTemplate(
+            employee_map_id=employee.id,
+            embedding_vector=embedding,
+            vector_norm=1.0,
+            version=1,
+            is_active=True,
+        )
+        db.add(template)
+        created_templates.append(template)
+
+    if not created_templates:
+        return error_response(
+            message="No readable accepted sample found for embedding",
+            status_code=422,
+            code="NO_READABLE_SAMPLE",
+        )
+
+    db.flush()
+    for template in created_templates:
+        faiss_service.add_embedding(employee.id, template.embedding_vector, template_id=template.id)
 
     enrollment.status = "completed"
     enrollment.finished_at = datetime.now(timezone.utc)
     enrollment.notes = payload.notes
     employee.is_enrolled = True
 
-    db.add(template)
     db.add(enrollment)
     db.add(employee)
     db.commit()
@@ -246,6 +257,8 @@ def finish_enrollment(payload: EnrollmentFinishRequest, db: Session = Depends(ge
         data={
             "employee_id": employee.employee_id,
             "accepted_samples": accepted_samples,
+            "templates_created": len(created_templates),
+            "embedding_provider": embedding_service.provider_name(),
             "status": enrollment.status,
         },
     )

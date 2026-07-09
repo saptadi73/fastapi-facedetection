@@ -65,6 +65,12 @@ VITE_GEOLOCATION_ENABLE_HIGH_ACCURACY=true
 VITE_GEOLOCATION_TIMEOUT_MS=10000
 ```
 
+Catatan inference:
+
+- Frontend tidak perlu mengetahui detail model ONNX.
+- Backend akan mengembalikan `embedding_provider` pada hasil enrollment/attendance.
+- Nilai provider dapat berupa `visual` atau `onnx`; gunakan hanya untuk badge/debug/admin UI, bukan untuk logic bisnis frontend.
+
 ## 5. Kontrak API yang Digunakan Frontend
 
 Endpoint utama:
@@ -103,11 +109,26 @@ Envelope response standar:
 Data penting dari `enroll/sample` response:
 
 - `data.accepted`
+- `data.reason_codes`
 - `data.blur_score`
 - `data.brightness_score`
 - `data.storage.local_url`
 - `data.storage.object_url`
 - `data.storage.odoo_attachment_id`
+
+Data penting dari `enroll/finish` response:
+
+- `data.employee_id`
+- `data.accepted_samples`
+- `data.templates_created`
+- `data.embedding_provider`
+- `data.status`
+
+Catatan penting:
+
+- Upload 5-10 foto karyawan tidak mengubah file model `.onnx`.
+- Foto yang diterima backend akan dikonversi menjadi embedding/template dan disimpan di database.
+- Jika model `.onnx` diganti atau provider berubah, lakukan enrollment ulang semua employee agar template lama tidak bercampur dengan template provider baru.
 
 ## 7. Alur Attendance di Frontend
 
@@ -152,6 +173,9 @@ Contoh field response attendance yang harus di-handle frontend:
   "employee_id": "EMP001",
   "similarity": 0.98,
   "quality_score": 3200.5,
+  "embedding_provider": "onnx",
+  "odoo_sync_status": "success",
+  "odoo_attendance_id": "4567",
   "status": "success",
   "latitude": -6.1753924,
   "longitude": 106.8271528,
@@ -293,6 +317,7 @@ export interface ApiEnvelope<T> {
 export interface EnrollmentSampleData {
   sample_id: number
   accepted: boolean
+  reason_codes: string[]
   blur_score: number
   brightness_score: number
   face_count: number
@@ -303,6 +328,14 @@ export interface EnrollmentSampleData {
     object_url: string
     odoo_attachment_id: string | null
   }
+}
+
+export interface EnrollmentFinishData {
+  employee_id: string
+  accepted_samples: number
+  templates_created: number
+  embedding_provider: 'visual' | 'onnx'
+  status: string
 }
 
 export interface AttendanceRequestPayload {
@@ -321,6 +354,9 @@ export interface AttendanceResultData {
   employee_id: string | null
   similarity: number
   quality_score: number
+  embedding_provider: 'visual' | 'onnx'
+  odoo_sync_status: string | null
+  odoo_attendance_id: string | null
   status: string
   latitude: number | null
   longitude: number | null
@@ -379,8 +415,12 @@ Hal yang sudah tersedia di backend:
 
 - endpoint attendance menerima `latitude`, `longitude`, `gps_accuracy_meters`, `gps_provider`
 - response attendance mengembalikan field GPS tersebut
+- response attendance mengembalikan `embedding_provider`
+- response attendance mengembalikan status sinkronisasi Odoo (`odoo_sync_status`, `odoo_attendance_id`) jika match berhasil
 - history attendance juga mengembalikan data GPS
 - endpoint sample enrollment mengembalikan metadata storage image
+- endpoint sample enrollment mengembalikan `reason_codes` untuk sample yang ditolak
+- endpoint finish enrollment membuat multi-template dari semua sample valid, bukan hanya satu foto
 
 Implikasi untuk frontend:
 

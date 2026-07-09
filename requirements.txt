@@ -22,3 +22,5 @@ pytest-asyncio==1.2.0
 pytest-cov==7.1.0
 google-genai==1.47.0
 pillow==11.3.0
+numpy>=1.26.0
+onnxruntime>=1.17.0

@@ -38,6 +38,9 @@ Bagian yang sudah tersedia di repository `fastapi-fd`:
 - data GPS sudah disimpan pada tabel `face_attendance_attempt`
 - payload sinkronisasi ke Odoo sudah menyertakan konteks GPS
 - helper geolocation untuk hitung jarak meter sudah tersedia
+- enrollment sudah mendukung multi-foto dan multi-template per employee
+- embedding provider dapat berupa `visual` atau `onnx`
+- model `.onnx` bersifat statis; upload foto employee tidak mengubah model
 - attachment upload ke Odoo masih berupa placeholder service
 
 Bagian yang masih perlu diimplementasikan di Odoo:
@@ -76,6 +79,7 @@ Catatan:
 
 - jangan commit credential ke repository
 - gunakan secret manager atau environment deployment
+- konfigurasi face model seperti `FACE_EMBEDDING_PROVIDER` dan `FACE_ONNX_MODEL_PATH` berada di FastAPI, bukan di Odoo
 
 ## 5. Desain Mapping Data
 
@@ -97,6 +101,15 @@ Saat FastAPI match sukses:
 - `action=checkout` -> update `check_out` pada attendance aktif employee
 
 Log sinkronisasi disimpan di `odoo_attendance_sync`.
+
+Field biometric yang perlu dipahami Odoo:
+
+- Odoo menerima hasil akhir matching, bukan menjalankan model face recognition.
+- `embedding_provider` dapat dikirim sebagai metadata audit (`visual` atau `onnx`).
+- FastAPI response attendance membedakan hasil biometric match dari status sinkronisasi Odoo melalui `odoo_sync_status`.
+- Foto enrollment/attendance dapat disimpan sebagai evidence attachment bila diaktifkan.
+- Embedding/template wajah sebaiknya tetap berada di database FastAPI, bukan disalin ke Odoo.
+- Jika model `.onnx` diganti, semua employee perlu enrollment ulang di FastAPI.
 
 ### 5.3 GPS dan Radius Attendance
 
@@ -193,6 +206,7 @@ Contoh payload:
   "action": "checkin",
   "captured_at": "2026-07-08T09:00:00Z",
   "similarity": 0.92,
+  "embedding_provider": "onnx",
   "device_code": "CAM-001",
   "quality_score": 3500.12,
   "latitude": -6.1753924,
@@ -296,6 +310,13 @@ Rekomendasi tambahan:
 - sign payload dengan HMAC
 - audit log request/response tanpa menyimpan secret
 
+Catatan biometric dan lisensi model:
+
+- Foto wajah dan embedding adalah data sensitif; batasi akses, audit penggunaan, dan tetapkan retention policy.
+- Pastikan ada dasar persetujuan/pemberitahuan karyawan sesuai kebijakan perusahaan dan regulasi yang berlaku.
+- Model ONNX pihak ketiga harus dicek lisensinya sebelum digunakan untuk production/komersial.
+- InsightFace pretrained model umum digunakan untuk riset/non-commercial; production komersial perlu lisensi/model yang sesuai.
+
 ## 10. Error Handling dan Retry
 
 Klasifikasi error:
@@ -328,6 +349,7 @@ Jalankan job periodik, misalnya tiap 15 menit:
 - attendance dengan akurasi GPS buruk diperlakukan sesuai rule bisnis
 - attendance di Odoo muncul sesuai timezone
 - attachment foto terbentuk bila enabled
+- metadata `embedding_provider` tercatat bila dikirim sebagai audit
 - kegagalan Odoo menghasilkan log gagal di FastAPI
 - replay job dapat memperbaiki status gagal
 

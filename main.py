@@ -1,16 +1,44 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI
+from contextlib import asynccontextmanager
+
+from fastapi import Depends, FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-from config.database import check_database_connection
+from config.database import SessionLocal, check_database_connection
 from config.settings import settings
+from models.face_attendance import FaceTemplate
 from routes import attendance_router, device_router, face_enrollment_router
+from services.faiss_service import faiss_service
 from supports.exception_handlers import register_exception_handlers
 
-app = FastAPI(title=settings.app_name)
+
+def _load_faiss_index_on_startup(db: Session):
+    """Loads active face templates into the FAISS index."""
+    if not faiss_service.is_empty():
+        return
+    templates = db.scalars(select(FaceTemplate).where(FaceTemplate.is_active.is_(True))).all()
+    for template in templates:
+        faiss_service.add_embedding(
+            employee_map_id=template.employee_map_id,
+            embedding=template.embedding_vector,
+            template_id=template.id,
+        )
+    print(f"FAISS index loaded with {len(templates)} templates.")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    with SessionLocal() as db:
+        _load_faiss_index_on_startup(db)
+    yield
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
 register_exception_handlers(app)
 app.include_router(face_enrollment_router)
 app.include_router(attendance_router)

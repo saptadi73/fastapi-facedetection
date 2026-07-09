@@ -170,6 +170,8 @@ face_attendance_attempt
 
 -   generate embedding
 -   compare embedding
+-   mendukung provider `visual`, `auto`, dan `onnx`
+-   model `.onnx` bersifat statis; enrollment hanya membuat template/embedding baru
 
 ## faiss_service
 
@@ -178,6 +180,7 @@ face_attendance_attempt
 -   update embedding
 -   remove embedding
 -   nearest neighbor search
+-   index saat ini in-memory dan sudah mendukung banyak template per employee
 
 ## attendance_service
 
@@ -286,10 +289,14 @@ Saat match berhasil:
 
 Contoh pengaturan:
 
--   recognition_threshold
--   min_detection_confidence
--   min_blur_score
--   min_brightness_score
+-   FACE_RECOGNITION_THRESHOLD
+-   FACE_MIN_DETECTION_CONFIDENCE
+-   FACE_MIN_BLUR_SCORE
+-   FACE_MIN_BRIGHTNESS_SCORE
+-   FACE_MAX_BRIGHTNESS_SCORE
+-   FACE_EMBEDDING_PROVIDER (`visual`, `auto`, `onnx`)
+-   FACE_ONNX_MODEL_PATH
+-   FACE_ONNX_INPUT_SIZE
 -   max_face_count
 -   attendance_duplicate_window
 
@@ -412,7 +419,13 @@ error 422/HTTPException/500 mengikuti format yang konsisten.
 - Geolocation helper tersedia di `services/geolocation_service.py` untuk
     kebutuhan perhitungan jarak/radius di tahap lanjutan.
 - Enrollment embedding diambil dari sample valid terbaru, sehingga source
-    embedding enrollment dan attendance konsisten.
+- Enrollment membuat template dari semua sample valid pada sesi tersebut
+    sehingga attendance dapat mencocokkan foto baru terhadap multi-foto
+    employee.
+- Jika provider/model embedding diganti, lakukan enrollment ulang agar
+    `face_template` tidak mencampur embedding dari model lama dan model baru.
+- Script `scripts/setup_face_model.py` dapat menyiapkan model ONNX InsightFace
+    ke `models/face_embedding.onnx`.
 - Attendance history menyimpan audit trail match success/failed.
 
 ## Perintah Operasional
@@ -477,3 +490,4 @@ Dokumentasi implementasi lanjutan:
 - `docs/Odoo14_Community_Integration_Guide.md`
 - `docs/Frontend_Vue_Implementation_Guide.md`
 - `docs/Inference_Pipeline_Roadmap.md`
+- `docs/ONNX_Face_Embedding_Setup.md`

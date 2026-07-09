@@ -16,11 +16,14 @@ Tujuan utama:
 Status backend saat ini:
 
 - deteksi wajah masih placeholder logic
-- pencarian kandidat masih in-memory nearest neighbor sederhana
-- quality check masih basic
+- embedding model sudah memiliki adapter ONNX Runtime opsional, dengan fallback visual berbasis Pillow
+- pencarian kandidat masih in-memory nearest neighbor sederhana, tetapi sudah mendukung multi-template per employee
+- quality check sudah terpusat dengan reason code dasar
 - alur API enrollment/attendance, storage, GPS, dan integrasi Odoo sudah berjalan
 
-Artinya, fondasi arsitektur sudah ada, tetapi engine inferensi real belum aktif.
+Artinya, fondasi arsitektur sudah ada dan provider ONNX sudah bisa diaktifkan.
+Namun pipeline production penuh masih membutuhkan face detection/alignment nyata,
+kalibrasi threshold dengan data pilot, dan index FAISS native.
 
 ## 3. KPI Target Production
 
@@ -83,8 +86,10 @@ Deliverable:
 Tugas teknis:
 
 - pilih model embedding yang sesuai SLA (CPU/GPU)
+- pastikan lisensi model sesuai untuk penggunaan production/komersial
 - buat benchmark akurasi per kondisi cahaya/pose
 - kalibrasi threshold per environment jika perlu
+- lakukan enrollment ulang ketika provider/model embedding diganti
 
 Exit criteria:
 
@@ -148,7 +153,7 @@ Alasannya:
 
 - `requirements.txt` belum memakai library inferensi native seperti MediaPipe, FAISS, OpenCV, ONNX Runtime, TensorFlow, PyTorch, atau NumPy.
 - `services/mediapipe_service.py` masih placeholder berbasis ukuran gambar, bukan MediaPipe native.
-- `services/embedding_service.py` masih memakai `hashlib` dan operasi list Python untuk menghasilkan embedding deterministik, bukan model neural network.
+- `services/embedding_service.py` sudah menyediakan provider `visual`, `auto`, dan `onnx`; mode production tetap membutuhkan model ONNX face embedding nyata dan kalibrasi threshold.
 - `services/faiss_service.py` masih in-memory nearest-neighbor sederhana, bukan FAISS native index.
 - quality check gambar masih memakai Pillow (`pillow`), yang tidak menetapkan AVX sebagai syarat deploy aplikasi.
 
@@ -192,12 +197,16 @@ Risiko utama:
 - kualitas kamera/device tidak konsisten
 - perubahan pencahayaan ekstrem menyebabkan FRR naik
 - drift threshold saat user base bertambah
+- pencampuran template dari model lama dan model baru jika enrollment ulang tidak dilakukan
+- risiko lisensi model pretrained pihak ketiga untuk penggunaan komersial
 - bottleneck sinkronisasi ke Odoo
 
 Mitigasi:
 
 - quality gate ketat + feedback UX
 - evaluasi threshold berkala
+- catat `embedding_provider` sebagai metadata audit dan re-enroll setelah model diganti
+- gunakan model/lisensi yang valid untuk production
 - monitoring metrik per site/device
 - retry queue + reconciler terjadwal
 
@@ -236,6 +245,6 @@ Dokumen yang harus selalu sinkron:
 ## 11. Next Action yang Bisa Langsung Dieksekusi
 
 1. aktifkan Fase 0 (instrumentasi baseline)
-2. pilih kandidat model embedding untuk benchmark
+2. benchmark provider ONNX aktif dengan dataset pilot karyawan
 3. tentukan target volume employee 6-12 bulan
 4. finalkan SLO bersama stakeholder HR dan IT
