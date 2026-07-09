@@ -85,3 +85,18 @@ Untuk production CPU inference disarankan:
 
 Setelah model diganti, lakukan enrollment ulang agar template lama tidak bercampur
 dengan embedding dari provider berbeda.
+
+## 5. Health Check
+
+Endpoint `/health` mengembalikan ringkasan kesiapan inference:
+
+- `inference.cpu.avx_available`
+- `inference.cpu.avx2_available`
+- `inference.cpu.avx_passed`
+- `inference.cpu.avx2_passed`
+- `inference.onnxruntime.installed`
+- `inference.onnxruntime.available_providers`
+- `inference.model.exists`
+
+Gunakan ini untuk memastikan server AVX/AVX2 dan ONNX Runtime siap sebelum
+dipakai production.

@@ -236,4 +236,3 @@ def history(
         code="ATTENDANCE_HISTORY",
         data={"items": payload, "total": len(payload)},
     )
-

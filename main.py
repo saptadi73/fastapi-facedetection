@@ -14,6 +14,7 @@ from config.settings import settings
 from models.face_attendance import FaceTemplate
 from routes import attendance_router, device_router, face_enrollment_router
 from services.faiss_service import faiss_service
+from services.system_health_service import system_health_service
 from supports.exception_handlers import register_exception_handlers
 
 
@@ -79,6 +80,7 @@ def health_check() -> JSONResponse:
         content={
             "service": "fastapi-fd",
             "healthy": True,
+            "inference": system_health_service.inference_health(),
         },
     )
 

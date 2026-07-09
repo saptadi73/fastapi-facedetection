@@ -262,6 +262,12 @@ POST /api/v1/device
 
 GET /health
 
+Response `/health` juga menyertakan readiness inference:
+
+- AVX/AVX2 availability dan pass flag
+- ONNX Runtime installed/provider availability
+- status file model ONNX
+
 ------------------------------------------------------------------------
 
 # Quality Rules

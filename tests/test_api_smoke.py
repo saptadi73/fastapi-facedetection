@@ -4,6 +4,7 @@ import base64
 import io
 
 from models.face_attendance import FaceEmployeeMap, FaceTemplate
+from services.faiss_service import faiss_service
 
 
 def _build_image() -> "Image.Image":
@@ -34,6 +35,12 @@ def test_health_endpoint(client):
     payload = response.json()
     assert payload["service"] == "fastapi-fd"
     assert payload["healthy"] is True
+    assert "inference" in payload
+    assert "cpu" in payload["inference"]
+    assert "avx_available" in payload["inference"]["cpu"]
+    assert "avx2_available" in payload["inference"]["cpu"]
+    assert "onnxruntime" in payload["inference"]
+    assert "model" in payload["inference"]
 
 
 def test_error_envelope_for_unknown_employee(client):
@@ -159,3 +166,42 @@ def test_reencoded_attendance_image_still_matches(client):
     payload = response.json()["data"]
     assert payload["matched"] is True
     assert payload["employee_id"] == "EMP-JPEG"
+
+
+def test_attendance_reloads_empty_face_index_from_templates(client):
+    image_base64 = _build_image_base64()
+
+    response = client.post(
+        "/api/v1/face/enroll/start",
+        json={
+            "employee_id": "EMP-RELOAD",
+            "employee_name": "Reload Employee",
+            "employee_code": "E-RELOAD",
+        },
+    )
+    assert response.status_code == 201
+
+    for _ in range(5):
+        response = client.post(
+            "/api/v1/face/enroll/sample",
+            json={"employee_id": "EMP-RELOAD", "image_base64": image_base64},
+        )
+        assert response.status_code == 201
+        assert response.json()["data"]["accepted"] is True
+
+    response = client.post(
+        "/api/v1/face/enroll/finish",
+        json={"employee_id": "EMP-RELOAD"},
+    )
+    assert response.status_code == 200
+
+    faiss_service.clear()
+
+    response = client.post(
+        "/api/v1/attendance/checkin",
+        json={"image_base64": image_base64},
+    )
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["matched"] is True
+    assert payload["employee_id"] == "EMP-RELOAD"
