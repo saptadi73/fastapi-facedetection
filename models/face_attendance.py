@@ -41,6 +41,8 @@ class FaceEmployeeMap(Base):
     employee_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     employee_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     employee_name: Mapped[str] = mapped_column(String(255))
+    odoo_user_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    login_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_enrolled: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

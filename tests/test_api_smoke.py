@@ -4,6 +4,7 @@ import base64
 import io
 
 from models.face_attendance import FaceEmployeeMap, FaceTemplate
+from services.odoo_service import OdooAuthResult
 from services.faiss_service import faiss_service
 
 
@@ -41,6 +42,69 @@ def test_health_endpoint(client):
     assert "avx2_available" in payload["inference"]["cpu"]
     assert "onnxruntime" in payload["inference"]
     assert "model" in payload["inference"]
+
+
+def test_login_proxies_credentials_to_odoo(client, db_session, monkeypatch):
+    captured: dict[str, str] = {}
+
+    def fake_authenticate(username, password, odoo_base_url=None, odoo_db=None) -> OdooAuthResult:
+        captured["username"] = username
+        captured["password"] = password
+        captured["odoo_base_url"] = odoo_base_url or ""
+        captured["odoo_db"] = odoo_db or ""
+        return OdooAuthResult(
+            success=True,
+            uid=7,
+            username=username,
+            name="Demo User",
+            session_id="session-123",
+            user_context={"tz": "Asia/Jakarta"},
+            response={"result": {"uid": 7}},
+            employee={
+                "id": 11,
+                "name": "Demo Employee",
+                "barcode": "EMP011",
+                "identification_id": None,
+                "work_email": username,
+                "user_id": 7,
+            },
+        )
+
+    monkeypatch.setattr("routes.auth.odoo_service.authenticate", fake_authenticate)
+
+    response = client.post(
+        "/api/v1/auth/login",
+        json={
+            "username": "demo@example.com",
+            "password": "secret",
+            "odoo_base_url": "http://127.0.0.1:8070",
+            "odoo_db": "jabung",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert captured == {
+        "username": "demo@example.com",
+        "password": "secret",
+        "odoo_base_url": "http://127.0.0.1:8070",
+        "odoo_db": "jabung",
+    }
+    assert payload["success"] is True
+    assert payload["code"] == "LOGIN_SUCCESS"
+    assert payload["data"]["uid"] == 7
+    assert payload["data"]["odoo_base_url"] == "http://127.0.0.1:8070"
+    assert payload["data"]["odoo_db"] == "jabung"
+    assert payload["data"]["session_id"] == "session-123"
+    assert "password" not in payload["data"]
+    assert payload["data"]["employee_resolved"] is True
+    assert payload["data"]["employee"]["id"] == 11
+    assert payload["data"]["employee_map_id"]
+
+    employee_map = db_session.query(FaceEmployeeMap).filter_by(employee_id="11").one()
+    assert employee_map.odoo_user_id == 7
+    assert employee_map.login_email == "demo@example.com"
+    assert employee_map.employee_code == "EMP011"
 
 
 def test_error_envelope_for_unknown_employee(client):

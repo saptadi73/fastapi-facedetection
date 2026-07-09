@@ -67,8 +67,6 @@ Contoh environment variable:
 ```env
 ODOO_BASE_URL=https://odoo.example.com
 ODOO_DB=odoo_prod
-ODOO_USERNAME=face.integration@company.com
-ODOO_PASSWORD=your-password
 ODOO_TIMEOUT_SECONDS=15
 ODOO_VERIFY_SSL=true
 ODOO_ATTACHMENTS_ENABLED=true
@@ -81,6 +79,58 @@ Catatan:
 - gunakan secret manager atau environment deployment
 - konfigurasi face model seperti `FACE_EMBEDDING_PROVIDER` dan `FACE_ONNX_MODEL_PATH` berada di FastAPI, bukan di Odoo
 
+## 4.1 Login Odoo dari Frontend
+
+FastAPI menyediakan endpoint:
+
+```text
+POST /api/v1/auth/login
+```
+
+Frontend Vue mengirim:
+
+```json
+{
+  "odoo_base_url": "http://127.0.0.1:8070",
+  "odoo_db": "jabung",
+  "username": "user@example.com",
+  "password": "secret"
+}
+```
+
+FastAPI meneruskan credential tersebut ke Odoo JSON-RPC:
+
+```text
+POST {ODOO_BASE_URL}/web/session/authenticate
+```
+
+Payload ke Odoo:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "call",
+  "params": {
+    "db": "odoo_prod",
+    "login": "user@example.com",
+    "password": "secret"
+  }
+}
+```
+
+Catatan:
+
+- Login page frontend dapat menyediakan input/select untuk URL Odoo dan database.
+- Jika `odoo_base_url` atau `odoo_db` tidak dikirim, FastAPI memakai konfigurasi `.env`.
+- Username/password user tidak disimpan di FastAPI.
+- Response login ke frontend tidak boleh mengembalikan password.
+- `session_id` Odoo yang dikembalikan harus diperlakukan sebagai secret.
+- Gunakan HTTPS agar credential tidak lewat jaringan dalam bentuk plain HTTP.
+- Setelah login sukses, FastAPI mencoba resolve `hr.employee` dengan domain:
+  - `user_id = uid`, atau
+  - `work_email = login`
+- Jika employee ditemukan, FastAPI menyimpan/memperbarui mapping lokal di `face_employee_map`.
+
 ## 5. Desain Mapping Data
 
 ### 5.1 Mapping Employee
@@ -92,6 +142,12 @@ Rekomendasi mapping:
 - `face_employee_map.employee_id` -> `hr.employee.id`
 - `face_employee_map.employee_code` -> `hr.employee.barcode` atau `identification_id`
 - `face_employee_map.employee_name` -> `hr.employee.name`
+- `face_employee_map.odoo_user_id` -> `res.users.id`
+- `face_employee_map.login_email` -> login/email Odoo user
+
+Dengan struktur ini, foto upload/template tetap milik employee yang valid,
+tetapi dapat ditelusuri kembali ke user login Odoo yang dipakai masuk ke
+frontend.
 
 ### 5.2 Attendance Result
 

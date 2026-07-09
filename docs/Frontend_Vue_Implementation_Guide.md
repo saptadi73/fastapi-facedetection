@@ -75,6 +75,7 @@ Catatan inference:
 
 Endpoint utama:
 
+- `POST /api/v1/auth/login`
 - `POST /api/v1/face/enroll/start`
 - `POST /api/v1/face/enroll/sample`
 - `POST /api/v1/face/enroll/finish`
@@ -97,6 +98,59 @@ Envelope response standar:
 }
 ```
 
+## 5.1 Login Odoo via FastAPI
+
+Frontend Vue mengirim username/password ke FastAPI. FastAPI meneruskan credential
+tersebut ke Odoo JSON-RPC endpoint `/web/session/authenticate`.
+
+Payload:
+
+```json
+{
+  "odoo_base_url": "http://127.0.0.1:8070",
+  "odoo_db": "jabung",
+  "username": "user@example.com",
+  "password": "secret"
+}
+```
+
+Response sukses:
+
+```json
+{
+  "uid": 7,
+  "username": "user@example.com",
+  "name": "Demo User",
+  "session_id": "odoo-session-id",
+  "odoo_base_url": "http://127.0.0.1:8070",
+  "odoo_db": "jabung",
+  "employee_resolved": true,
+  "employee_map_id": 12,
+  "employee": {
+    "id": 34,
+    "name": "Demo Employee",
+    "barcode": "EMP034",
+    "work_email": "user@example.com",
+    "user_id": 7
+  },
+  "user_context": {
+    "lang": "en_US",
+    "tz": "Asia/Jakarta"
+  }
+}
+```
+
+Catatan keamanan:
+
+- Password tidak disimpan di FastAPI.
+- Login page frontend perlu menyediakan input/select untuk `odoo_base_url` dan `odoo_db`.
+- Jika `odoo_base_url` atau `odoo_db` tidak dikirim, FastAPI memakai nilai default dari `.env`.
+- FastAPI akan mencoba mencari `hr.employee` berdasarkan `res.users.id` atau email login.
+- Jika ditemukan, FastAPI membuat/memperbarui mapping lokal di `face_employee_map`.
+- Foto enrollment/template tetap direlasikan ke employee, tetapi mapping tersebut menyimpan `odoo_user_id` dan `login_email` sebagai relasi ke user login.
+- Gunakan HTTPS untuk frontend ke FastAPI dan FastAPI ke Odoo.
+- Simpan `session_id` hanya jika memang diperlukan frontend; perlakukan seperti secret.
+
 ## 6. Alur Enrollment di Frontend
 
 1. User memilih employee.
@@ -105,6 +159,8 @@ Envelope response standar:
 4. Tiap frame dikirim ke `enroll/sample`.
 5. Frontend baca hasil accepted/rejected dari response.
 6. Jika accepted mencukupi, panggil `enroll/finish`.
+
+Jika aplikasi dipakai untuk self-service attendance, employee sebaiknya diambil dari hasil login (`data.employee.id`), bukan dipilih bebas oleh user. Pilihan employee bebas hanya cocok untuk mode admin/HR enrollment.
 
 Data penting dari `enroll/sample` response:
 

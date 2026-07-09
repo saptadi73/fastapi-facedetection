@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from config.database import SessionLocal, check_database_connection
 from config.settings import settings
 from models.face_attendance import FaceTemplate
-from routes import attendance_router, device_router, face_enrollment_router
+from routes import attendance_router, auth_router, device_router, face_enrollment_router
 from services.faiss_service import faiss_service
 from services.system_health_service import system_health_service
 from supports.exception_handlers import register_exception_handlers
@@ -41,6 +41,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 register_exception_handlers(app)
+app.include_router(auth_router)
 app.include_router(face_enrollment_router)
 app.include_router(attendance_router)
 app.include_router(device_router)

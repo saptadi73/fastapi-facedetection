@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     object_upload_dir: str = str(BASE_DIR / "uploads" / "object")
     object_public_base_url: str = "http://127.0.0.1:8000"
 
+    odoo_base_url: str = ""
+    odoo_db: str = ""
+    odoo_timeout_seconds: int = 15
+    odoo_verify_ssl: bool = True
+
     face_recognition_threshold: float = 0.82
     face_min_detection_confidence: float = 0.7
     face_min_blur_score: float = 20.0
