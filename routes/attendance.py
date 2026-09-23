@@ -28,8 +28,13 @@ from services.image_service import image_service
 from services.mediapipe_service import mediapipe_service
 from services.odoo_service import odoo_service
 from supports import error_response, success_response
+from supports.security import require_api_key
 
-router = APIRouter(prefix="/api/v1/attendance", tags=["Attendance"])
+router = APIRouter(
+    prefix="/api/v1/attendance",
+    tags=["Attendance"],
+    dependencies=[Depends(require_api_key)],
+)
 
 
 def _resolve_device(db: Session, device_code: Optional[str]) -> Optional[FaceDevice]:
@@ -55,7 +60,50 @@ def _ensure_face_index_loaded(db: Session) -> None:
         )
 
 
+def _replay_existing_event(action: str, event_id: str, db: Session):
+    attempt = db.scalar(select(FaceAttendanceAttempt).where(FaceAttendanceAttempt.event_id == event_id))
+    if attempt is None:
+        return None
+    if attempt.action != action:
+        return error_response(
+            message="event_id sudah digunakan untuk action lain",
+            status_code=409,
+            code="ATTENDANCE_EVENT_ACTION_MISMATCH",
+            data={"event_id": event_id, "existing_action": attempt.action},
+        )
+
+    recognition = db.scalar(
+        select(FaceRecognitionResult).where(FaceRecognitionResult.attempt_id == attempt.id)
+    )
+    employee_id = None
+    if recognition and recognition.employee_map_id:
+        employee = db.get(FaceEmployeeMap, recognition.employee_map_id)
+        employee_id = employee.employee_id if employee else None
+    sync = db.scalar(select(OdooAttendanceSync).where(OdooAttendanceSync.attempt_id == attempt.id))
+    return success_response(
+        message="Attendance event already processed",
+        code="ATTENDANCE_IDEMPOTENT_REPLAY",
+        data={
+            "attempt_id": attempt.id,
+            "event_id": event_id,
+            "action": action,
+            "matched": bool(recognition and recognition.matched),
+            "employee_id": employee_id,
+            "similarity": float(recognition.similarity) if recognition else 0.0,
+            "quality_score": attempt.quality_score,
+            "odoo_sync_status": sync.sync_status if sync else None,
+            "odoo_attendance_id": sync.odoo_attendance_id if sync else None,
+            "status": attempt.status,
+        },
+    )
+
+
 def _run_attendance(action: str, payload: AttendanceRequest, db: Session):
+    if payload.event_id:
+        replay = _replay_existing_event(action, payload.event_id, db)
+        if replay is not None:
+            return replay
+
     image_bytes = image_service.decode_base64(payload.image_base64)
     image = image_service.open_image(image_bytes)
     quality = image_service.evaluate_quality(image)
@@ -84,6 +132,7 @@ def _run_attendance(action: str, payload: AttendanceRequest, db: Session):
         gps_provider=payload.gps_provider,
     )
     attempt = FaceAttendanceAttempt(
+        event_id=payload.event_id,
         device_id=device.id if device else None,
         action=action,
         captured_at=payload.captured_at or datetime.now(timezone.utc),
@@ -176,6 +225,7 @@ def _run_attendance(action: str, payload: AttendanceRequest, db: Session):
         code="ATTENDANCE_PROCESSED",
         data={
             "attempt_id": attempt.id,
+            "event_id": payload.event_id,
             "action": action,
             "matched": recognition.matched,
             "employee_id": employee_id,

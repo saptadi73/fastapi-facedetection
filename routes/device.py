@@ -10,8 +10,13 @@ from config.database import get_db
 from models.face_attendance import FaceDevice
 from schemas.device import DeviceCreateRequest
 from supports import error_response, success_response
+from supports.security import require_api_key
 
-router = APIRouter(prefix="/api/v1/device", tags=["Device"])
+router = APIRouter(
+    prefix="/api/v1/device",
+    tags=["Device"],
+    dependencies=[Depends(require_api_key)],
+)
 
 
 @router.get("")

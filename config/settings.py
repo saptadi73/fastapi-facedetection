@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     odoo_retry_worker_enabled: bool = False
     odoo_retry_interval_seconds: int = 300
     odoo_retry_batch_size: int = 20
+    api_key: str = ""
+    odoo_attachments_enabled: bool = False
 
     face_recognition_threshold: float = 0.82
     face_min_detection_confidence: float = 0.7

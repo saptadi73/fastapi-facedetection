@@ -122,6 +122,7 @@ class FaceAttendanceAttempt(Base):
     __tablename__ = "face_attendance_attempt"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    event_id: Mapped[Optional[str]] = mapped_column(String(128), unique=True, index=True, nullable=True)
     device_id: Mapped[Optional[int]] = mapped_column(ForeignKey("face_device.id", ondelete="SET NULL"), nullable=True, index=True)
     action: Mapped[str] = mapped_column(String(32), default=AttendanceAction.CHECKIN.value)
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -155,7 +155,7 @@ def test_enrollment_and_checkin_flow(client, db_session):
         assert sample_payload["storage"]["local_path"]
         assert sample_payload["storage"]["local_url"].startswith("/uploads/")
         assert sample_payload["storage"]["object_url"].startswith("http://")
-        assert sample_payload["storage"]["odoo_attachment_id"]
+        assert sample_payload["storage"]["odoo_attachment_id"] is None
 
     response = client.post(
         "/api/v1/face/enroll/finish",
@@ -173,6 +173,7 @@ def test_enrollment_and_checkin_flow(client, db_session):
     response = client.post(
         "/api/v1/attendance/checkin",
         json={
+            "event_id": "event-checkin-001",
             "device_code": "CAM-T1",
             "image_base64": image_base64,
             "latitude": -6.2000001,
@@ -192,6 +193,14 @@ def test_enrollment_and_checkin_flow(client, db_session):
     assert payload["data"]["latitude"] == -6.2000001
     assert payload["data"]["longitude"] == 106.8166662
     assert payload["data"]["gps_accuracy_meters"] == 12.5
+
+    replay = client.post(
+        "/api/v1/attendance/checkin",
+        json={"event_id": "event-checkin-001", "image_base64": image_base64},
+    )
+    assert replay.status_code == 200
+    assert replay.json()["code"] == "ATTENDANCE_IDEMPOTENT_REPLAY"
+    assert replay.json()["data"]["attempt_id"] == payload["data"]["attempt_id"]
 
 
 def test_reencoded_attendance_image_still_matches(client):

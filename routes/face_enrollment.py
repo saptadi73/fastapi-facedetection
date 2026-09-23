@@ -22,8 +22,13 @@ from services.local_storage_service import local_storage_service
 from services.mediapipe_service import mediapipe_service
 from services.sample_media_storage_service import sample_media_storage_service
 from supports import error_response, success_response
+from supports.security import require_api_key
 
-router = APIRouter(prefix="/api/v1/face/enroll", tags=["Face Enrollment"])
+router = APIRouter(
+    prefix="/api/v1/face/enroll",
+    tags=["Face Enrollment"],
+    dependencies=[Depends(require_api_key)],
+)
 
 
 @router.post("/start")

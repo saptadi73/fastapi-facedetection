@@ -16,6 +16,12 @@ roadmap inferensi, dan kondisi repository saat ini.
 - [x] Menambahkan endpoint `POST /api/v1/attendance/sync/retry` untuk replay
   sinkronisasi Odoo yang gagal.
 - [x] Menambahkan worker retry periodik yang dapat diaktifkan melalui environment.
+- [x] Menambahkan idempotency `event_id` agar retry frontend tidak membuat
+  attendance Odoo ganda.
+- [x] Menambahkan API key opsional untuk endpoint enrollment, attendance,
+  device, dan retry Odoo.
+- [x] Menjadikan penyimpanan foto ke Odoo attachment opt-in; default hanya
+  local/object storage.
 
 ## Prioritas berikutnya
 
@@ -34,8 +40,8 @@ roadmap inferensi, dan kondisi repository saat ini.
 - [ ] Isi lokasi/radius, toleransi akurasi GPS, URL FastAPI, dan API key dari
   Odoo Settings; gunakan secret yang sama pada `ODOO_ATTENDANCE_API_KEY`.
 - [ ] Uji worker retry terhadap Odoo staging dengan timeout/network failure.
-- [ ] Tambahkan authentication antar FastAPI dan frontend/Odoo; endpoint saat ini
-  belum layak diekspos publik tanpa HTTPS dan auth.
+- [ ] Ganti API key bersama dengan JWT/service identity bila deployment sudah
+  memiliki identity provider; HTTPS tetap wajib.
 
 ### P1 — kualitas recognition
 

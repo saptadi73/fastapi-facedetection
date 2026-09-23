@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 
 class AttendanceRequest(BaseModel):
+    event_id: Optional[str] = Field(default=None, max_length=128)
     employee_id: Optional[str] = Field(default=None, max_length=64)
     device_code: Optional[str] = Field(default=None, max_length=64)
     image_base64: str = Field(min_length=32)
