@@ -1,5 +1,18 @@
 # Frontend Vue Implementation Guide
 
+Backend HR endpoints yang dipakai frontend:
+
+- `GET /api/v1/hr/timeoff/types`
+- `GET/POST /api/v1/hr/timeoff`
+- `POST /api/v1/hr/timeoff/{leave_id}/cancel`
+- `GET/POST /api/v1/hr/overtime`
+- `GET /api/v1/hr/payroll/payslips`
+- `GET /api/v1/hr/payroll/payslips/{payslip_id}/pdf`
+
+Frontend hanya memanggil FastAPI dengan header `X-API-Key`; FastAPI yang
+berkomunikasi dengan Odoo 14 melalui JWT `grt_external_api`. JWT Odoo tidak
+boleh dikirim atau disimpan di browser.
+
 Dokumen ini adalah panduan implementasi frontend Vue.js untuk integrasi dengan FastAPI Face Attendance Service.
 
 ## 1. Tujuan Frontend

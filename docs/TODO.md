@@ -27,9 +27,10 @@ roadmap inferensi, dan kondisi repository saat ini.
 
 ### P0 — wajib sebelum pilot HR
 
-- [ ] Isi konfigurasi service user Odoo melalui secret manager atau environment:
+- [ ] Isi konfigurasi client JWT Odoo melalui secret manager atau environment:
   `ODOO_INTEGRATION_ENABLED=true`, `ODOO_BASE_URL`, `ODOO_DB`,
-  `ODOO_USERNAME`, dan `ODOO_PASSWORD`/API key.
+  `ODOO_API_MODE=external`, `ODOO_EXTERNAL_API_CLIENT_ID`, dan
+  `ODOO_EXTERNAL_API_CLIENT_SECRET`.
 - [ ] Uji JSON-RPC pada database Odoo staging: check-in, checkout, duplicate,
   employee tidak ditemukan, timeout, dan SSL.
 - [x] Buat custom module Odoo `grt_face_attendance_bridge` untuk validasi radius
@@ -40,8 +41,13 @@ roadmap inferensi, dan kondisi repository saat ini.
 - [ ] Isi lokasi/radius, toleransi akurasi GPS, URL FastAPI, dan API key dari
   Odoo Settings; gunakan secret yang sama pada `ODOO_ATTENDANCE_API_KEY`.
 - [ ] Uji worker retry terhadap Odoo staging dengan timeout/network failure.
-- [ ] Ganti API key bersama dengan JWT/service identity bila deployment sudah
-  memiliki identity provider; HTTPS tetap wajib.
+- [x] Gunakan JWT `grt_external_api` dengan scope HR; self-service dibatasi ke
+  employee milik user Odoo, sedangkan akses lintas employee memerlukan scope
+  `hr:admin`.
+- [x] Dokumentasikan kontrak JWT, scope HR, endpoint Odoo, dan konfigurasi
+  client pada panduan integrasi.
+- [ ] Ganti client secret dengan secret manager dan aktifkan request signature
+  HMAC bila diwajibkan oleh client Odoo; HTTPS tetap wajib.
 
 ### P1 — kualitas recognition
 
@@ -52,6 +58,8 @@ roadmap inferensi, dan kondisi repository saat ini.
   average latency melalui `GET /metrics`.
 - [x] Menambahkan readiness check embedding pada `/health`; provider ONNX yang
   gagal tidak lagi dilaporkan sebagai healthy.
+- [x] Menambahkan endpoint FastAPI untuk Time Off, Overtime, daftar Payslip,
+  dan download PDF Payslip melalui koneksi Odoo JSON-RPC.
 - [x] Menambahkan adapter detector OpenCV Haar Cascade sebagai baseline CPU
   yang dapat diaktifkan dengan `FACE_DETECTOR_PROVIDER=opencv`.
 - [x] Menambahkan provider MediaPipe Face Detection yang dapat diaktifkan dengan
@@ -65,8 +73,8 @@ roadmap inferensi, dan kondisi repository saat ini.
 
 ### P2 — operasional dan UX
 
-- [ ] Sediakan frontend Vue untuk enrollment multi-sample, attendance, GPS, dan
-  feedback reason code.
+- [ ] Sediakan frontend Vue untuk enrollment multi-sample, attendance, GPS,
+  Time Off, Overtime, Payslip, dan feedback reason code.
 - [ ] Tambahkan metric similarity, reject reason, dan success rate Odoo per
   employee/device/site; baseline HTTP metrics sudah tersedia.
 - [ ] Tambahkan retention policy untuk foto/embedding dan audit akses biometric.
@@ -76,16 +84,17 @@ roadmap inferensi, dan kondisi repository saat ini.
 
 Tanpa konfigurasi Odoo, development/test memakai mock jika
 `ODOO_ALLOW_MOCK=true` (default). Untuk staging/production, aktifkan integrasi
-JSON-RPC dan matikan mock:
+JWT external API dan matikan mock:
 
 ```env
 ODOO_INTEGRATION_ENABLED=true
 ODOO_ALLOW_MOCK=false
 ODOO_BASE_URL=https://odoo.example.com
 ODOO_DB=odoo_prod
-ODOO_USERNAME=face-attendance-service
-ODOO_PASSWORD=<secret>
+ODOO_API_MODE=external
+ODOO_EXTERNAL_API_CLIENT_ID=fastapi-facedetection
+ODOO_EXTERNAL_API_CLIENT_SECRET=<secret>
+ODOO_EXTERNAL_API_SCOPES=hr:attendance:write,hr:timeoff:read,hr:timeoff:write,hr:overtime:read,hr:overtime:write,hr:payroll:read
 ODOO_ATTENDANCE_ENDPOINT=/api/face-attendance/event
-ODOO_ATTENDANCE_API_KEY=<same-secret-as-odoo-settings>
 ODOO_VERIFY_SSL=true
 ```

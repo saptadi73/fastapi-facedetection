@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from config.database import SessionLocal, check_database_connection
 from config.settings import settings
 from models.face_attendance import FaceTemplate
-from routes import attendance_router, auth_router, device_router, face_enrollment_router
+from routes import attendance_router, auth_router, device_router, face_enrollment_router, hr_router
 from services.faiss_service import faiss_service
 from services.system_health_service import system_health_service
 from services.attendance_service import attendance_service
@@ -99,6 +99,7 @@ app.include_router(auth_router)
 app.include_router(face_enrollment_router)
 app.include_router(attendance_router)
 app.include_router(device_router)
+app.include_router(hr_router)
 
 uploads_root = Path(settings.base_dir) / "uploads"
 uploads_root.mkdir(parents=True, exist_ok=True)

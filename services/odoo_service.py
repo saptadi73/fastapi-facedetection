@@ -263,6 +263,18 @@ class OdooService:
                 )
             return OdooSyncResult(False, action, None, {"error": "Odoo integration is disabled"})
 
+        if settings.odoo_api_mode.strip().lower() == "external":
+            try:
+                result = self._external_request("/api/v1/hr/attendance/event", {
+                    "event_id": str(context.get("event_id") or context.get("attempt_id") or ""),
+                    "employee_id": employee_id,
+                    "action": action,
+                    **context,
+                }, "hr:attendance:write")
+                return OdooSyncResult(bool(result.get("success", True)), action, str(result.get("attendance_id")) if result.get("attendance_id") else None, {"mode": "external", **result})
+            except (httpx.HTTPError, RuntimeError, ValueError) as exc:
+                return OdooSyncResult(False, action, None, {"error": str(exc), "mode": "external"})
+
         try:
             employee_number = int(employee_id)
         except (TypeError, ValueError):
@@ -378,6 +390,137 @@ class OdooService:
             return OdooAttachmentResult(True, str(attachment_id), {"mode": "jsonrpc", "attachment_id": attachment_id})
         except (httpx.HTTPError, RuntimeError, ValueError) as exc:
             return OdooAttachmentResult(False, None, {"error": str(exc), "mode": "jsonrpc"})
+
+    def list_timeoff_types(self) -> list[dict]:
+        if self._uses_external_api():
+            return self._external_request("/api/v1/hr/timeoff/types", {}, "hr:timeoff:read").get("items", [])
+        _, session_id = self._authenticate_service_user()
+        return self._call_kw("hr.leave.type", "search_read", [[]], {"fields": ["id", "name"], "order": "name"}, session_id) or []
+
+    def list_timeoffs(self, employee_id: str) -> list[dict]:
+        if self._uses_external_api():
+            return self._external_request("/api/v1/hr/timeoff/list", {"employee_id": employee_id}, "hr:timeoff:read").get("items", [])
+        employee_number = self._employee_number(employee_id)
+        _, session_id = self._authenticate_service_user()
+        return self._call_kw(
+            "hr.leave", "search_read", [["employee_id", "=", employee_number]],
+            {"fields": ["id", "name", "holiday_status_id", "request_date_from", "request_date_to", "state"], "order": "request_date_from desc"},
+            session_id,
+        ) or []
+
+    def create_timeoff(self, employee_id: str, leave_type_id: int, date_from: str, date_to: str, description: str) -> dict:
+        if self._uses_external_api():
+            return self._external_request("/api/v1/hr/timeoff/create", {"employee_id": employee_id, "leave_type_id": leave_type_id, "date_from": date_from, "date_to": date_to, "description": description}, "hr:timeoff:write")
+        employee_number = self._employee_number(employee_id)
+        _, session_id = self._authenticate_service_user()
+        leave_id = self._call_kw(
+            "hr.leave", "create", [{
+                "employee_id": employee_number,
+                "holiday_status_id": leave_type_id,
+                "request_date_from": date_from,
+                "request_date_to": date_to,
+                "name": description,
+            }], {}, session_id,
+        )
+        return {"id": leave_id, "employee_id": employee_number, "state": "confirm"}
+
+    def cancel_timeoff(self, leave_id: int) -> bool:
+        if self._uses_external_api():
+            self._external_request("/api/v1/hr/timeoff/cancel", {"leave_id": leave_id}, "hr:timeoff:write")
+            return True
+        _, session_id = self._authenticate_service_user()
+        result = self._call_kw("hr.leave", "action_refuse", [[leave_id]], {}, session_id)
+        return bool(result is None or result)
+
+    def list_overtimes(self, employee_id: str) -> list[dict]:
+        if self._uses_external_api():
+            return self._external_request("/api/v1/hr/overtime/list", {"employee_id": employee_id}, "hr:overtime:read").get("items", [])
+        employee_number = self._employee_number(employee_id)
+        _, session_id = self._authenticate_service_user()
+        return self._call_kw(
+            settings.odoo_overtime_model, "search_read", [["employee_id", "=", employee_number]],
+            {"fields": ["id", "employee_id", "date", "duration", "duration_hours", "description", "state"], "order": "date desc"},
+            session_id,
+        ) or []
+
+    def create_overtime(self, employee_id: str, overtime_date: str, duration_hours: float, description: str) -> dict:
+        if self._uses_external_api():
+            return self._external_request("/api/v1/hr/overtime/create", {"employee_id": employee_id, "date": overtime_date, "duration_hours": duration_hours, "description": description}, "hr:overtime:write")
+        employee_number = self._employee_number(employee_id)
+        _, session_id = self._authenticate_service_user()
+        overtime_id = self._call_kw(
+            settings.odoo_overtime_model, "create", [{
+                "employee_id": employee_number,
+                "date": overtime_date,
+                "duration": duration_hours,
+                "duration_hours": duration_hours,
+                "description": description,
+            }], {}, session_id,
+        )
+        return {"id": overtime_id, "employee_id": employee_number}
+
+    def list_payslips(self, employee_id: str) -> list[dict]:
+        if self._uses_external_api():
+            return self._external_request("/api/v1/hr/payroll/payslips/list", {"employee_id": employee_id}, "hr:payroll:read").get("items", [])
+        employee_number = self._employee_number(employee_id)
+        _, session_id = self._authenticate_service_user()
+        return self._call_kw(
+            "hr.payslip", "search_read", [["employee_id", "=", employee_number]],
+            {"fields": ["id", "name", "number", "date_from", "date_to", "state", "employee_id"], "order": "date_to desc"},
+            session_id,
+        ) or []
+
+    def payslip_pdf(self, payslip_id: int) -> tuple[bytes, str]:
+        if self._uses_external_api():
+            import base64
+            result = self._external_request("/api/v1/hr/payroll/payslip/pdf", {"payslip_id": payslip_id}, "hr:payroll:read")
+            return base64.b64decode(result["content_base64"]), result.get("filename", f"payslip-{payslip_id}.pdf")
+        _, session_id = self._authenticate_service_user()
+        url = f"{settings.odoo_base_url.rstrip('/')}/report/pdf/hr_payroll.report_payslip/{payslip_id}"
+        with httpx.Client(timeout=settings.odoo_timeout_seconds, verify=settings.odoo_verify_ssl) as client:
+            response = client.get(url, params={"db": settings.odoo_db}, cookies={"session_id": session_id})
+            response.raise_for_status()
+        return response.content, f"payslip-{payslip_id}.pdf"
+
+    @staticmethod
+    def _employee_number(employee_id: str) -> int:
+        try:
+            return int(employee_id)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Odoo employee_id must be numeric") from exc
+
+    def _uses_external_api(self) -> bool:
+        return settings.odoo_api_mode.strip().lower() == "external"
+
+    def _external_request(self, path: str, payload: dict, scope: str) -> dict:
+        token = self._external_access_token()
+        url = settings.odoo_base_url.rstrip("/") + path
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        with httpx.Client(timeout=settings.odoo_timeout_seconds, verify=settings.odoo_verify_ssl) as client:
+            response = client.post(url, params={"db": settings.odoo_db}, json=payload, headers=headers)
+            response.raise_for_status()
+        body = response.json()
+        result = body.get("result", body)
+        if result.get("status") == "error":
+            raise RuntimeError(result.get("message") or f"Odoo external API scope failed: {scope}")
+        return result.get("data", result)
+
+    def _external_access_token(self) -> str:
+        if not settings.odoo_external_api_client_id or not settings.odoo_external_api_client_secret:
+            raise RuntimeError("Odoo external API client credentials are not configured")
+        scopes = [item.strip() for item in settings.odoo_external_api_scopes.split(",") if item.strip()]
+        url = settings.odoo_base_url.rstrip("/") + "/api/v1/auth/token"
+        with httpx.Client(timeout=settings.odoo_timeout_seconds, verify=settings.odoo_verify_ssl) as client:
+            response = client.post(url, params={"db": settings.odoo_db}, json={"client_id": settings.odoo_external_api_client_id, "client_secret": settings.odoo_external_api_client_secret, "scopes": scopes})
+            response.raise_for_status()
+        body = response.json()
+        result = body.get("result", body)
+        if result.get("status") == "error":
+            raise RuntimeError(result.get("message") or "Odoo external API token request failed")
+        token = result.get("data", result).get("access_token")
+        if not token:
+            raise RuntimeError("Odoo external API did not return an access token")
+        return token
 
     def _authenticate_service_user(self) -> tuple[int, str]:
         if not settings.odoo_base_url or not settings.odoo_db or not settings.odoo_username or not settings.odoo_password:

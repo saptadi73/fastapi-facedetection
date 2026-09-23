@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     odoo_verify_ssl: bool = True
     odoo_attendance_endpoint: str = "/api/face-attendance/event"
     odoo_attendance_api_key: str = ""
+    odoo_overtime_model: str = "hr.attendance.overtime"
+    odoo_api_mode: str = "jsonrpc"
+    odoo_external_api_client_id: str = ""
+    odoo_external_api_client_secret: str = ""
+    odoo_external_api_scopes: str = "hr:attendance:write,hr:timeoff:read,hr:timeoff:write,hr:overtime:read,hr:overtime:write,hr:payroll:read"
+    odoo_external_api_token_ttl_seconds: int = 300
     odoo_integration_enabled: bool = False
     odoo_allow_mock: bool = True
     odoo_retry_worker_enabled: bool = False

@@ -43,6 +43,8 @@ Bagian yang sudah tersedia di repository `fastapi-fd`:
 - model `.onnx` bersifat statis; upload foto employee tidak mengubah model
 - sinkronisasi `hr.attendance` dan upload `ir.attachment` sudah memiliki jalur JSON-RPC nyata
 - mode mock hanya digunakan saat integrasi belum diaktifkan untuk development/test
+- client JWT `grt_external_api` untuk HR attendance, Time Off, Overtime, dan Payslip
+- self-service employee scope; akses employee lain membutuhkan scope `hr:admin`
 
 Bagian yang sudah tersedia pada custom Odoo `grt_face_attendance_bridge`:
 
@@ -72,8 +74,10 @@ ODOO_TIMEOUT_SECONDS=15
 ODOO_VERIFY_SSL=true
 ODOO_INTEGRATION_ENABLED=true
 ODOO_ALLOW_MOCK=false
-ODOO_USERNAME=face-attendance-service
-ODOO_PASSWORD=<secret>
+ODOO_API_MODE=external
+ODOO_EXTERNAL_API_CLIENT_ID=fastapi-facedetection
+ODOO_EXTERNAL_API_CLIENT_SECRET=<secret>
+ODOO_EXTERNAL_API_SCOPES=hr:attendance:write,hr:timeoff:read,hr:timeoff:write,hr:overtime:read,hr:overtime:write,hr:payroll:read
 ODOO_RETRY_WORKER_ENABLED=true
 ODOO_RETRY_INTERVAL_SECONDS=300
 ODOO_RETRY_BATCH_SIZE=20
@@ -87,7 +91,85 @@ Catatan:
 - gunakan secret manager atau environment deployment
 - konfigurasi face model seperti `FACE_EMBEDDING_PROVIDER` dan `FACE_ONNX_MODEL_PATH` berada di FastAPI, bukan di Odoo
 
-## 4.1 Login Odoo dari Frontend
+## 4.1 Integrasi JWT `grt_external_api`
+
+Untuk deployment Odoo14Kanjabung, koneksi server-to-server menggunakan modul
+`grt_external_api`. Frontend tidak meminta token Odoo secara langsung.
+
+FastAPI meminta token ke:
+
+```text
+POST /api/v1/auth/token?db=<database>
+```
+
+Payload token:
+
+```json
+{
+  "client_id": "fastapi-facedetection",
+  "client_secret": "<secret>",
+  "scopes": [
+    "hr:attendance:write",
+    "hr:timeoff:read",
+    "hr:timeoff:write",
+    "hr:overtime:read",
+    "hr:overtime:write",
+    "hr:payroll:read"
+  ]
+}
+```
+
+FastAPI memakai hasil token sebagai:
+
+```http
+Authorization: Bearer <jwt>
+```
+
+Self-service hanya dapat mengakses employee yang terhubung dengan `user_id`
+Odoo pada token. Akses HR lintas employee membutuhkan scope `hr:admin` pada
+client dan token.
+
+### Endpoint JWT Odoo
+
+| Endpoint | Scope | Fungsi |
+|---|---|---|
+| `/api/v1/hr/attendance/event` | `hr:attendance:write` | Check-in/check-out wajah |
+| `/api/v1/hr/timeoff/types` | `hr:timeoff:read` | Daftar jenis izin |
+| `/api/v1/hr/timeoff/list` | `hr:timeoff:read` | Daftar izin employee |
+| `/api/v1/hr/timeoff/create` | `hr:timeoff:write` | Membuat pengajuan izin |
+| `/api/v1/hr/timeoff/cancel` | `hr:timeoff:write` | Membatalkan/menolak izin |
+| `/api/v1/hr/overtime/list` | `hr:overtime:read` | Daftar lembur |
+| `/api/v1/hr/overtime/create` | `hr:overtime:write` | Membuat pengajuan lembur |
+| `/api/v1/hr/payroll/payslips/list` | `hr:payroll:read` | Daftar payslip |
+| `/api/v1/hr/payroll/payslip/pdf` | `hr:payroll:read` | Mengambil PDF payslip base64 |
+
+### Konfigurasi FastAPI
+
+```env
+ODOO_INTEGRATION_ENABLED=true
+ODOO_ALLOW_MOCK=false
+ODOO_API_MODE=external
+ODOO_BASE_URL=https://odoo.example.com
+ODOO_DB=odoo_prod
+ODOO_EXTERNAL_API_CLIENT_ID=fastapi-facedetection
+ODOO_EXTERNAL_API_CLIENT_SECRET=<secret>
+ODOO_EXTERNAL_API_SCOPES=hr:attendance:write,hr:timeoff:read,hr:timeoff:write,hr:overtime:read,hr:overtime:write,hr:payroll:read
+ODOO_VERIFY_SSL=true
+```
+
+### Konfigurasi client Odoo
+
+Di Odoo buka `External API > Clients`, lalu:
+
+1. Buat client `fastapi-facedetection`.
+2. Pilih user Odoo service yang memiliki akses HR sesuai kebutuhan.
+3. Isi company yang diizinkan.
+4. Tambahkan scope HR yang diperlukan.
+5. Tambahkan `hr:admin` hanya untuk client HR/admin.
+6. Generate client secret dan simpan di secret manager/FastAPI `.env`.
+7. Upgrade modul `grt_external_api` setelah controller HR ditambahkan.
+
+## 4.2 Login Odoo dari Frontend
 
 FastAPI menyediakan endpoint:
 
