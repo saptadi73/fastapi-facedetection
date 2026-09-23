@@ -1,10 +1,12 @@
 import asyncio
+from time import perf_counter
 from datetime import datetime, timezone
 from pathlib import Path
 
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
+from fastapi import Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
@@ -18,6 +20,8 @@ from routes import attendance_router, auth_router, device_router, face_enrollmen
 from services.faiss_service import faiss_service
 from services.system_health_service import system_health_service
 from services.attendance_service import attendance_service
+from services.metrics_service import metrics_service
+from supports.security import require_api_key
 from supports.exception_handlers import register_exception_handlers
 
 
@@ -32,6 +36,7 @@ def _load_faiss_index_on_startup(db: Session):
             embedding=template.embedding_vector,
             template_id=template.id,
         )
+    faiss_service.persist()
     print(f"FAISS index loaded with {len(templates)} templates.")
 
 
@@ -80,6 +85,16 @@ def _retry_failed_syncs_once() -> None:
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 register_exception_handlers(app)
+
+
+@app.middleware("http")
+async def collect_request_metrics(request: Request, call_next):
+    started_at = perf_counter()
+    response = await call_next(request)
+    metrics_service.observe_request(request.url.path, response.status_code, started_at)
+    return response
+
+
 app.include_router(auth_router)
 app.include_router(face_enrollment_router)
 app.include_router(attendance_router)
@@ -115,14 +130,20 @@ def test_response() -> JSONResponse:
 
 @app.get("/health")
 def health_check() -> JSONResponse:
+    inference = system_health_service.inference_health()
     return JSONResponse(
         status_code=200,
         content={
             "service": "fastapi-fd",
-            "healthy": True,
-            "inference": system_health_service.inference_health(),
+            "healthy": inference["ready"],
+            "inference": inference,
         },
     )
+
+
+@app.get("/metrics", dependencies=[Depends(require_api_key)])
+def metrics() -> JSONResponse:
+    return JSONResponse(status_code=200, content=metrics_service.snapshot())
 
 
 @app.get("/db-check")

@@ -48,12 +48,19 @@ class Settings(BaseSettings):
     face_min_blur_score: float = 20.0
     face_min_brightness_score: float = 40.0
     face_max_brightness_score: float = 220.0
+    face_max_yaw: float = 30.0
+    face_max_pitch: float = 30.0
+    face_max_roll: float = 30.0
+    face_detector_provider: str = "placeholder"
+    face_detector_cascade_path: str = ""
     face_embedding_provider: str = "visual"
     face_onnx_model_path: str = ""
     face_onnx_input_size: int = 112
     face_onnx_input_name: str = ""
     face_onnx_output_name: str = ""
     face_onnx_execution_providers: str = "CPUExecutionProvider"
+    face_index_path: str = "models/face_index.json"
+    face_index_persist_enabled: bool = True
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,

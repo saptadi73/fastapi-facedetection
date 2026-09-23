@@ -44,6 +44,14 @@ def test_health_endpoint(client):
     assert "model" in payload["inference"]
 
 
+def test_metrics_endpoint(client):
+    response = client.get("/metrics")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["requests_total"] >= 1
+    assert "status_codes" in payload
+
+
 def test_login_proxies_credentials_to_odoo(client, db_session, monkeypatch):
     captured: dict[str, str] = {}
 

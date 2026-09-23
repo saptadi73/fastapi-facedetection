@@ -45,18 +45,30 @@ roadmap inferensi, dan kondisi repository saat ini.
 
 ### P1 — kualitas recognition
 
-- [ ] Ganti detector placeholder dengan MediaPipe face detection/landmark nyata.
+- [x] Menambahkan MediaPipe Face Mesh untuk landmark dan estimasi pose yaw/pitch/roll.
+- [x] Menambahkan batas pose pada quality gate melalui `FACE_MAX_YAW`,
+  `FACE_MAX_PITCH`, dan `FACE_MAX_ROLL`.
+- [x] Menambahkan baseline metrics request, HTTP status, endpoint count, dan
+  average latency melalui `GET /metrics`.
+- [x] Menambahkan readiness check embedding pada `/health`; provider ONNX yang
+  gagal tidak lagi dilaporkan sebagai healthy.
+- [x] Menambahkan adapter detector OpenCV Haar Cascade sebagai baseline CPU
+  yang dapat diaktifkan dengan `FACE_DETECTOR_PROVIDER=opencv`.
+- [x] Menambahkan provider MediaPipe Face Detection yang dapat diaktifkan dengan
+  `FACE_DETECTOR_PROVIDER=mediapipe`.
 - [ ] Aktifkan model embedding ONNX production dan kalibrasi threshold dengan
-  dataset pilot yang disetujui HR.
+  dataset pilot yang disetujui HR. Readiness check sudah tersedia.
 - [ ] Validasi pose, single-face, blur, brightness, dan liveness/anti-spoofing.
-- [ ] Persist/rebuild index recognition dengan FAISS native setelah skala template
+- [x] Persist/rebuild cache index recognition dari `face_template` saat startup.
+- [ ] Ganti cache nearest-neighbor dengan FAISS native setelah skala template
   melebihi kebutuhan in-memory.
 
 ### P2 — operasional dan UX
 
 - [ ] Sediakan frontend Vue untuk enrollment multi-sample, attendance, GPS, dan
   feedback reason code.
-- [ ] Tambahkan metric latency, similarity, reject reason, dan success rate Odoo.
+- [ ] Tambahkan metric similarity, reject reason, dan success rate Odoo per
+  employee/device/site; baseline HTTP metrics sudah tersedia.
 - [ ] Tambahkan retention policy untuk foto/embedding dan audit akses biometric.
 - [ ] Jalankan UAT lintas device/site serta benchmark p95 sebelum rollout.
 

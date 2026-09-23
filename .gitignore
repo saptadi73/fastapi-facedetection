@@ -9,3 +9,4 @@ tests/test_app.db
 models/*.onnx
 models/*.zip
 models/downloads/
+models/face_index.json

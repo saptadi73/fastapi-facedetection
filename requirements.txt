@@ -24,3 +24,5 @@ google-genai==1.47.0
 pillow==11.3.0
 numpy>=1.26.0
 onnxruntime>=1.17.0
+opencv-contrib-python>=4.8.0,<5.0.0
+mediapipe>=0.10.0,<1.0.0

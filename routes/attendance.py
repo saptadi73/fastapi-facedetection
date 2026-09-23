@@ -107,7 +107,7 @@ def _run_attendance(action: str, payload: AttendanceRequest, db: Session):
     image_bytes = image_service.decode_base64(payload.image_base64)
     image = image_service.open_image(image_bytes)
     quality = image_service.evaluate_quality(image)
-    face = mediapipe_service.detect(image.width, image.height)
+    face = mediapipe_service.detect(image)
     quality_decision = face_quality_service.evaluate(face=face, quality=quality)
 
     if not quality_decision.accepted:

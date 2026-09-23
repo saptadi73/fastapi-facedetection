@@ -21,6 +21,12 @@ class FaceQualityService:
             reason_codes.append("INVALID_FACE_COUNT")
         if face.confidence < settings.face_min_detection_confidence:
             reason_codes.append("LOW_DETECTION_CONFIDENCE")
+        if abs(face.yaw) > settings.face_max_yaw:
+            reason_codes.append("YAW_OUT_OF_RANGE")
+        if abs(face.pitch) > settings.face_max_pitch:
+            reason_codes.append("PITCH_OUT_OF_RANGE")
+        if abs(face.roll) > settings.face_max_roll:
+            reason_codes.append("ROLL_OUT_OF_RANGE")
         if quality.blur_score < settings.face_min_blur_score:
             reason_codes.append("BLUR_TOO_LOW")
         if quality.brightness_score < settings.face_min_brightness_score:

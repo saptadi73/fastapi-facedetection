@@ -30,6 +30,18 @@ class EmbeddingService:
             return "onnx"
         return "visual"
 
+    def health(self) -> dict:
+        configured = settings.face_embedding_provider.strip().lower()
+        onnx_ready = self._can_use_onnx() if configured in {"onnx", "auto"} else False
+        ready = onnx_ready if configured == "onnx" else True
+        return {
+            "configured_provider": configured,
+            "active_provider": self.provider_name(),
+            "ready": ready,
+            "onnx_ready": onnx_ready,
+            "onnx_error": self._onnx_error,
+        }
+
     def _generate_vector(self, image: Image.Image) -> list[float]:
         provider = settings.face_embedding_provider.strip().lower()
         if provider == "onnx":

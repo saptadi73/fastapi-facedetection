@@ -88,7 +88,7 @@ def upload_enrollment_sample(payload: EnrollmentSampleRequest, db: Session = Dep
     image_bytes = image_service.decode_base64(payload.image_base64)
     image = image_service.open_image(image_bytes)
     quality = image_service.evaluate_quality(image)
-    face = mediapipe_service.detect(image.width, image.height)
+    face = mediapipe_service.detect(image)
     quality_decision = face_quality_service.evaluate(face=face, quality=quality)
 
     sample = FaceSample(
@@ -255,6 +255,7 @@ def finish_enrollment(payload: EnrollmentFinishRequest, db: Session = Depends(ge
     db.add(enrollment)
     db.add(employee)
     db.commit()
+    faiss_service.persist()
 
     return success_response(
         message="Enrollment completed",

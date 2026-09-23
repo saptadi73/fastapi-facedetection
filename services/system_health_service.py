@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Optional
 
 from config.settings import settings
+from services.embedding_service import embedding_service
+from services.faiss_service import faiss_service
 
 
 class SystemHealthService:
@@ -26,9 +28,13 @@ class SystemHealthService:
         ]
         model_path = self._resolve_model_path(settings.face_onnx_model_path)
         model_exists = bool(model_path and model_path.exists())
+        embedding_health = embedding_service.health()
 
         return {
+            "ready": embedding_health["ready"],
             "embedding_provider": settings.face_embedding_provider,
+            "embedding": embedding_health,
+            "detector_provider": settings.face_detector_provider,
             "recognition_threshold": settings.face_recognition_threshold,
             "cpu": {
                 "architecture": platform.machine(),
@@ -53,6 +59,7 @@ class SystemHealthService:
                 "exists": model_exists,
                 "input_size": settings.face_onnx_input_size,
             },
+            "face_index": faiss_service.load_metadata(),
         }
 
     def _resolve_model_path(self, configured_path: str) -> Optional[Path]:

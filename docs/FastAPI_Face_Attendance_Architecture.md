@@ -181,6 +181,7 @@ face_attendance_attempt
 -   remove embedding
 -   nearest neighbor search
 -   index saat ini in-memory dan sudah mendukung banyak template per employee
+-   cache index dipersist ke `FACE_INDEX_PATH` dan direbuild dari database saat startup
 
 ## attendance_service
 
@@ -268,6 +269,19 @@ Response `/health` juga menyertakan readiness inference:
 - ONNX Runtime installed/provider availability
 - status file model ONNX
 
+## Metrics
+
+Endpoint `GET /metrics` menyediakan baseline observability in-memory:
+
+- total request dan request gagal
+- rata-rata latency request dalam milidetik
+- distribusi status HTTP
+- jumlah request per path
+
+Jika `API_KEY` dikonfigurasi, endpoint ini membutuhkan header `X-API-Key`.
+Metrics akan reset ketika proses aplikasi restart; untuk production perlu
+diteruskan ke sistem monitoring terpusat.
+
 ------------------------------------------------------------------------
 
 # Quality Rules
@@ -277,6 +291,18 @@ Response `/health` juga menyertakan readiness inference:
 -   Blur memenuhi batas minimum.
 -   Brightness dalam rentang yang diterima.
 -   Pose (yaw/pitch/roll) masih dalam toleransi.
+
+Konfigurasi pose:
+
+```env
+FACE_MAX_YAW=30
+FACE_MAX_PITCH=30
+FACE_MAX_ROLL=30
+```
+
+Jika `FACE_DETECTOR_PROVIDER=mediapipe`, Face Mesh digunakan untuk menghitung
+estimasi pose dari landmark wajah. Request di luar toleransi ditolak dengan
+reason code `YAW_OUT_OF_RANGE`, `PITCH_OUT_OF_RANGE`, atau `ROLL_OUT_OF_RANGE`.
 
 ------------------------------------------------------------------------
 

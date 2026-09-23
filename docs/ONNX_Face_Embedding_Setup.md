@@ -90,6 +90,12 @@ dengan embedding dari provider berbeda.
 
 Endpoint `/health` mengembalikan ringkasan kesiapan inference:
 
+- `healthy=false` jika `FACE_EMBEDDING_PROVIDER=onnx` tetapi model/runtime tidak siap
+- `inference.ready`
+- `inference.embedding.configured_provider`
+- `inference.embedding.active_provider`
+- `inference.embedding.onnx_error`
+
 - `inference.cpu.avx_available`
 - `inference.cpu.avx2_available`
 - `inference.cpu.avx_passed`
