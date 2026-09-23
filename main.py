@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -7,6 +8,7 @@ from fastapi import Depends, FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from config.database import SessionLocal, check_database_connection
@@ -15,6 +17,7 @@ from models.face_attendance import FaceTemplate
 from routes import attendance_router, auth_router, device_router, face_enrollment_router
 from services.faiss_service import faiss_service
 from services.system_health_service import system_health_service
+from services.attendance_service import attendance_service
 from supports.exception_handlers import register_exception_handlers
 
 
@@ -34,9 +37,45 @@ def _load_faiss_index_on_startup(db: Session):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    try:
+        with SessionLocal() as db:
+            _load_faiss_index_on_startup(db)
+    except SQLAlchemyError as exc:
+        # Keep health and API routes available while the database is starting
+        # or temporarily unavailable. Requests using the DB will still return
+        # their normal database error until connectivity is restored.
+        print(f"Face index startup skipped: {exc}")
+    retry_task = None
+    if settings.odoo_retry_worker_enabled and settings.odoo_integration_enabled:
+        retry_task = asyncio.create_task(_odoo_retry_loop())
+    try:
+        yield
+    finally:
+        if retry_task:
+            retry_task.cancel()
+            await asyncio.gather(retry_task, return_exceptions=True)
+
+
+async def _odoo_retry_loop():
+    """Periodically replay failed Odoo syncs in a worker thread."""
+    while True:
+        try:
+            await asyncio.to_thread(_retry_failed_syncs_once)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            print(f"Odoo retry worker failed: {exc}")
+        await asyncio.sleep(max(10, settings.odoo_retry_interval_seconds))
+
+
+def _retry_failed_syncs_once() -> None:
     with SessionLocal() as db:
-        _load_faiss_index_on_startup(db)
-    yield
+        result = attendance_service.retry_failed_syncs(db, limit=settings.odoo_retry_batch_size)
+        if result["total"]:
+            print(
+                f"Odoo retry worker processed {result['total']} syncs; "
+                f"succeeded={result['succeeded']}"
+            )
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)

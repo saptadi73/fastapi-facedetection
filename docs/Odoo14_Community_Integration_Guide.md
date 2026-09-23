@@ -41,14 +41,15 @@ Bagian yang sudah tersedia di repository `fastapi-fd`:
 - enrollment sudah mendukung multi-foto dan multi-template per employee
 - embedding provider dapat berupa `visual` atau `onnx`
 - model `.onnx` bersifat statis; upload foto employee tidak mengubah model
-- attachment upload ke Odoo masih berupa placeholder service
+- sinkronisasi `hr.attendance` dan upload `ir.attachment` sudah memiliki jalur JSON-RPC nyata
+- mode mock hanya digunakan saat integrasi belum diaktifkan untuk development/test
 
-Bagian yang masih perlu diimplementasikan di Odoo:
+Bagian yang sudah tersedia pada custom Odoo `grt_face_attendance_bridge`:
 
-- model master lokasi attendance
-- validasi radius lokasi
-- endpoint/controller Odoo yang memutuskan accepted/rejected
-- penyimpanan hasil validasi lokasi pada attendance atau event log
+- model master lokasi attendance dan assignment lokasi per employee
+- validasi radius serta toleransi akurasi GPS
+- endpoint/controller Odoo ber-API-key yang memutuskan accepted/rejected
+- idempotency event dan penyimpanan audit pada attendance/event log
 
 ## 3. Prasyarat Odoo 14
 
@@ -69,6 +70,13 @@ ODOO_BASE_URL=https://odoo.example.com
 ODOO_DB=odoo_prod
 ODOO_TIMEOUT_SECONDS=15
 ODOO_VERIFY_SSL=true
+ODOO_INTEGRATION_ENABLED=true
+ODOO_ALLOW_MOCK=false
+ODOO_USERNAME=face-attendance-service
+ODOO_PASSWORD=<secret>
+ODOO_RETRY_WORKER_ENABLED=true
+ODOO_RETRY_INTERVAL_SECONDS=300
+ODOO_RETRY_BATCH_SIZE=20
 ODOO_ATTACHMENTS_ENABLED=true
 ODOO_ATTACHMENT_MODEL=hr.attendance
 ```
@@ -387,6 +395,18 @@ Skema retry yang disarankan:
 - attempt ke-3 delay 5 detik
 - jika tetap gagal, tandai `sync_status=failed` dan masuk antrean reprocess
 
+FastAPI menyediakan replay manual melalui:
+
+```text
+POST /api/v1/attendance/sync/retry?limit=20
+```
+
+Endpoint ini memperbarui row `odoo_attendance_sync` yang gagal tanpa membuat
+attempt attendance lokal baru. Scheduler/worker terautentikasi tetap perlu
+ditambahkan sebelum production. Worker retry bawaan dapat diaktifkan dengan
+`ODOO_RETRY_WORKER_ENABLED=true`; worker memproses batch secara periodik dan
+berhenti otomatis saat aplikasi shutdown.
+
 ## 11. Rekonsiliasi Data
 
 Jalankan job periodik, misalnya tiap 15 menit:
@@ -440,7 +460,7 @@ File backend yang terkait langsung:
 
 Langkah lanjutan paling dekat:
 
-1. ganti placeholder `upload_face_attachment` dengan XML-RPC/JSON-RPC Odoo nyata
+1. uji jalur JSON-RPC `hr.attendance` pada database staging
 2. tambahkan endpoint atau modul radius validation di Odoo
 3. ikat `odoo_attachment_id` ke `hr.attendance` atau event log
 4. tambahkan worker retry untuk `odoo_attendance_sync`

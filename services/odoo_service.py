@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
@@ -41,7 +42,11 @@ class OdooAuthResult:
 
 class OdooService:
     """
-    HTTP integration placeholder for Odoo API.
+    JSON-RPC integration for Odoo 14.
+
+    When Odoo is not configured, development/test environments may use the
+    explicit mock fallback. Production should set ODOO_INTEGRATION_ENABLED,
+    ODOO_BASE_URL, ODOO_DB, ODOO_USERNAME and ODOO_PASSWORD/API key.
     """
 
     def authenticate(
@@ -94,7 +99,7 @@ class OdooService:
                 timeout=settings.odoo_timeout_seconds,
                 verify=settings.odoo_verify_ssl,
             ) as client:
-                response = client.post(url, json=payload)
+                response = client.post(url, params={"db": database}, json=payload)
                 response.raise_for_status()
         except httpx.HTTPError as exc:
             return OdooAuthResult(
@@ -148,6 +153,7 @@ class OdooService:
                     username=username,
                     session_id=session_id,
                     odoo_base_url=base_url,
+                    odoo_db=database,
                 )
             except Exception as exc:
                 employee_error = str(exc)
@@ -170,6 +176,7 @@ class OdooService:
         username: str,
         session_id: str,
         odoo_base_url: Optional[str] = None,
+        odoo_db: Optional[str] = None,
     ) -> Optional[dict]:
         domain = ["|", ["user_id", "=", uid], ["work_email", "=", username]]
         records = self._call_kw(
@@ -182,6 +189,7 @@ class OdooService:
             },
             session_id=session_id,
             odoo_base_url=odoo_base_url,
+            odoo_db=odoo_db,
         )
         if not records:
             return None
@@ -205,8 +213,10 @@ class OdooService:
         kwargs: dict,
         session_id: str,
         odoo_base_url: Optional[str] = None,
+        odoo_db: Optional[str] = None,
     ):
         base_url = (odoo_base_url or settings.odoo_base_url).strip().rstrip("/")
+        database = (odoo_db or settings.odoo_db).strip()
         url = base_url + "/web/dataset/call_kw"
         payload = {
             "jsonrpc": "2.0",
@@ -223,7 +233,7 @@ class OdooService:
             timeout=settings.odoo_timeout_seconds,
             verify=settings.odoo_verify_ssl,
         ) as client:
-            response = client.post(url, json=payload, cookies=cookies)
+            response = client.post(url, params={"db": database}, json=payload, cookies=cookies)
             response.raise_for_status()
 
         body = response.json()
@@ -241,25 +251,149 @@ class OdooService:
         action: str,
         attendance_context: Optional[dict] = None,
     ) -> OdooSyncResult:
-        fake_id = f"odoo-{employee_id}-{int(datetime.now(timezone.utc).timestamp())}"
-        response = {
-            "employee_id": employee_id,
-            "action": action,
-            "synced_at": datetime.now(timezone.utc).isoformat(),
-            "attendance_context": attendance_context or {},
+        context = attendance_context or {}
+        if not settings.odoo_integration_enabled:
+            if settings.odoo_allow_mock:
+                fake_id = f"mock-{employee_id}-{int(datetime.now(timezone.utc).timestamp())}"
+                return OdooSyncResult(
+                    success=True,
+                    action=action,
+                    odoo_attendance_id=fake_id,
+                    response={"mode": "mock", "employee_id": employee_id, "action": action, **context},
+                )
+            return OdooSyncResult(False, action, None, {"error": "Odoo integration is disabled"})
+
+        try:
+            employee_number = int(employee_id)
+        except (TypeError, ValueError):
+            return OdooSyncResult(False, action, None, {"error": "Odoo employee_id must be numeric"})
+
+        if settings.odoo_attendance_api_key:
+            return self._sync_attendance_bridge(employee_number, action, context)
+
+        try:
+            uid, session_id = self._authenticate_service_user()
+            captured_at = self._odoo_datetime(context.get("captured_at"))
+            if action == "checkin":
+                open_rows = self._call_kw(
+                    "hr.attendance", "search_read",
+                    [["employee_id", "=", employee_number], ["check_out", "=", False]],
+                    {"fields": ["id", "check_in"], "limit": 1, "order": "check_in desc"},
+                    session_id,
+                )
+                if open_rows:
+                    return OdooSyncResult(False, action, str(open_rows[0]["id"]), {
+                        "error": "Employee already has an open attendance",
+                        "attendance_id": open_rows[0]["id"],
+                    })
+                attendance_id = self._call_kw(
+                    "hr.attendance", "create",
+                    [{"employee_id": employee_number, "check_in": captured_at}], {}, session_id,
+                )
+            elif action == "checkout":
+                open_rows = self._call_kw(
+                    "hr.attendance", "search_read",
+                    [["employee_id", "=", employee_number], ["check_out", "=", False]],
+                    {"fields": ["id", "check_in"], "limit": 1, "order": "check_in desc"},
+                    session_id,
+                )
+                if not open_rows:
+                    return OdooSyncResult(False, action, None, {"error": "No open attendance to checkout"})
+                attendance_id = open_rows[0]["id"]
+                self._call_kw(
+                    "hr.attendance", "write", [[attendance_id], {"check_out": captured_at}], {}, session_id,
+                )
+            else:
+                return OdooSyncResult(False, action, None, {"error": f"Unsupported attendance action: {action}"})
+
+            return OdooSyncResult(True, action, str(attendance_id), {
+                "mode": "jsonrpc",
+                "uid": uid,
+                "attendance_id": attendance_id,
+                "employee_id": employee_id,
+                "action": action,
+                "captured_at": captured_at,
+            })
+        except (httpx.HTTPError, RuntimeError, ValueError) as exc:
+            return OdooSyncResult(False, action, None, {"error": str(exc), "mode": "jsonrpc"})
+
+    def _sync_attendance_bridge(self, employee_id: int, action: str, context: dict) -> OdooSyncResult:
+        payload = {
+            "jsonrpc": "2.0",
+            "method": "call",
+            "params": {
+                "event_id": str(context.get("attempt_id") or ""),
+                "employee_id": employee_id,
+                "action": action,
+                "captured_at": context.get("captured_at"),
+                "device_code": context.get("device_code"),
+                "similarity": context.get("similarity"),
+                "embedding_provider": context.get("embedding_provider"),
+                "quality_score": context.get("quality_score"),
+                "latitude": context.get("latitude"),
+                "longitude": context.get("longitude"),
+                "gps_accuracy_meters": context.get("gps_accuracy_meters"),
+                "gps_provider": context.get("gps_provider"),
+            },
         }
-        return OdooSyncResult(success=True, action=action, odoo_attendance_id=fake_id, response=response)
+        url = settings.odoo_base_url.rstrip("/") + settings.odoo_attendance_endpoint
+        headers = {"X-Face-Attendance-Key": settings.odoo_attendance_api_key}
+        try:
+            with httpx.Client(timeout=settings.odoo_timeout_seconds, verify=settings.odoo_verify_ssl) as client:
+                response = client.post(url, params={"db": settings.odoo_db}, json=payload, headers=headers)
+                response.raise_for_status()
+            body = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            return OdooSyncResult(False, action, None, {"error": str(exc), "mode": "bridge"})
+
+        result = body.get("result") or {}
+        if body.get("error"):
+            result = {"success": False, "message": body["error"].get("message", "Odoo bridge error")}
+        attendance_id = result.get("attendance_id")
+        return OdooSyncResult(
+            bool(result.get("success")),
+            action,
+            str(attendance_id) if attendance_id else None,
+            {"mode": "bridge", **result},
+        )
 
     def upload_face_attachment(self, employee_id: str, sample_id: int, image_bytes: bytes) -> OdooAttachmentResult:
-        fake_attachment_id = f"att-{employee_id}-{sample_id}-{len(image_bytes)}"
-        response = {
-            "employee_id": employee_id,
-            "sample_id": sample_id,
-            "attachment_id": fake_attachment_id,
-            "size_bytes": len(image_bytes),
-            "uploaded_at": datetime.now(timezone.utc).isoformat(),
-        }
-        return OdooAttachmentResult(success=True, attachment_id=fake_attachment_id, response=response)
+        if not settings.odoo_integration_enabled:
+            if settings.odoo_allow_mock:
+                fake_attachment_id = f"mock-att-{employee_id}-{sample_id}"
+                return OdooAttachmentResult(True, fake_attachment_id, {"mode": "mock", "size_bytes": len(image_bytes)})
+            return OdooAttachmentResult(False, None, {"error": "Odoo integration is disabled"})
+        try:
+            _, session_id = self._authenticate_service_user()
+            attachment_id = self._call_kw(
+                "ir.attachment", "create", [{
+                    "name": f"face-sample-{employee_id}-{sample_id}.png",
+                    "res_model": "hr.employee",
+                    "res_id": int(employee_id),
+                    "type": "binary",
+                    "datas": base64.b64encode(image_bytes).decode("ascii"),
+                    "mimetype": "image/png",
+                }], {}, session_id,
+            )
+            return OdooAttachmentResult(True, str(attachment_id), {"mode": "jsonrpc", "attachment_id": attachment_id})
+        except (httpx.HTTPError, RuntimeError, ValueError) as exc:
+            return OdooAttachmentResult(False, None, {"error": str(exc), "mode": "jsonrpc"})
+
+    def _authenticate_service_user(self) -> tuple[int, str]:
+        if not settings.odoo_base_url or not settings.odoo_db or not settings.odoo_username or not settings.odoo_password:
+            raise RuntimeError("Odoo service credentials are not configured")
+        result = self.authenticate(settings.odoo_username, settings.odoo_password)
+        if not result.success or not result.uid or not result.session_id:
+            raise RuntimeError(result.error or "Odoo service authentication failed")
+        return result.uid, result.session_id
+
+    @staticmethod
+    def _odoo_datetime(value: Optional[str]) -> str:
+        if value:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        else:
+            parsed = datetime.now(timezone.utc)
+        return parsed.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
 odoo_service = OdooService()

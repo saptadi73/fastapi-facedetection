@@ -20,6 +20,7 @@ from models.face_attendance import (
 )
 from schemas.attendance import AttendanceRequest
 from services.embedding_service import embedding_service
+from services.attendance_service import attendance_service
 from services.faiss_service import faiss_service
 from services.face_quality_service import face_quality_service
 from services.geolocation_service import geolocation_service
@@ -123,10 +124,20 @@ def _run_attendance(action: str, payload: AttendanceRequest, db: Session):
     employee_id: Optional[str] = None
     odoo_sync_status: Optional[str] = None
     odoo_attendance_id: Optional[str] = None
+    sync_result = None
     if match.employee_map_id is not None:
         employee = db.get(FaceEmployeeMap, match.employee_map_id)
         if employee is not None:
             employee_id = employee.employee_id
+            if attendance_service.is_duplicate_attempt(db, employee.id, action):
+                attempt.status = "failed"
+                db.commit()
+                return error_response(
+                    message="Duplicate attendance attempt",
+                    status_code=409,
+                    code="ATTENDANCE_DUPLICATE",
+                    data={"attempt_id": attempt.id, "employee_id": employee_id, "action": action},
+                )
             sync_result = odoo_service.sync_attendance(
                 employee_id=employee.employee_id,
                 action=action,
@@ -156,7 +167,7 @@ def _run_attendance(action: str, payload: AttendanceRequest, db: Session):
             odoo_attendance_id = sync.odoo_attendance_id
             db.add(sync)
 
-    attempt.status = "success" if recognition.matched else "failed"
+    attempt.status = "success" if recognition.matched and (sync_result is None or sync_result.success) else "failed"
     db.add(attempt)
     db.commit()
 
@@ -235,4 +246,17 @@ def history(
         message="Attendance history fetched",
         code="ATTENDANCE_HISTORY",
         data={"items": payload, "total": len(payload)},
+    )
+
+
+@router.post("/sync/retry")
+def retry_failed_syncs(
+    limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    result = attendance_service.retry_failed_syncs(db=db, limit=limit)
+    return success_response(
+        message="Failed Odoo attendance syncs replayed",
+        code="ATTENDANCE_SYNC_RETRY",
+        data=result,
     )

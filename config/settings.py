@@ -17,10 +17,10 @@ class Settings(BaseSettings):
     app_port: int = 8000
 
     db_host: str = "localhost"
-    db_port: int = 5433
+    db_port: int = 5432
     db_name: str = "facedetection"
-    db_user: str = "postgres"
-    db_password: str = "admin"
+    db_user: str = "openpg"
+    db_password: str = "openpgpwd"
 
     base_dir: str = str(BASE_DIR)
     local_upload_dir: str = str(BASE_DIR / "uploads" / "local")
@@ -29,8 +29,17 @@ class Settings(BaseSettings):
 
     odoo_base_url: str = ""
     odoo_db: str = ""
+    odoo_username: str = ""
+    odoo_password: str = ""
     odoo_timeout_seconds: int = 15
     odoo_verify_ssl: bool = True
+    odoo_attendance_endpoint: str = "/api/face-attendance/event"
+    odoo_attendance_api_key: str = ""
+    odoo_integration_enabled: bool = False
+    odoo_allow_mock: bool = True
+    odoo_retry_worker_enabled: bool = False
+    odoo_retry_interval_seconds: int = 300
+    odoo_retry_batch_size: int = 20
 
     face_recognition_threshold: float = 0.82
     face_min_detection_confidence: float = 0.7
