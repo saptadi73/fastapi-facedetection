@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 30
-    backend_cors_origins: str = "http://localhost:5173,http://localhost:3000"
+    backend_cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000"
     odoo_attachments_enabled: bool = False
 
     face_recognition_threshold: float = 0.82

@@ -79,7 +79,8 @@ VITE_GEOLOCATION_ENABLE_HIGH_ACCURACY=true
 VITE_GEOLOCATION_TIMEOUT_MS=10000
 ```
 
-Backend harus mengizinkan origin Vite melalui `BACKEND_CORS_ORIGINS`. Untuk
+Backend harus mengizinkan origin Vite melalui `BACKEND_CORS_ORIGINS` (origin
+harus sama persis, termasuk hostname dan port). Untuk
 staging/production aktifkan `FRONTEND_AUTH_ENABLED=true` dan isi
 `JWT_SECRET_KEY` dengan secret panjang dari secret manager. Jangan menaruh
 `API_KEY` atau secret Odoo pada `VITE_*` karena nilai tersebut masuk ke bundle
