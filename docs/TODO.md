@@ -22,6 +22,9 @@ roadmap inferensi, dan kondisi repository saat ini.
   device, dan retry Odoo.
 - [x] Menjadikan penyimpanan foto ke Odoo attachment opt-in; default hanya
   local/object storage.
+- [x] Menambahkan access token JWT FastAPI untuk frontend; session Odoo tidak
+  dikembalikan ke browser.
+- [x] Menambahkan CORS terkonfigurasi melalui `BACKEND_CORS_ORIGINS` untuk Vue.
 
 ## Prioritas berikutnya
 
@@ -48,6 +51,22 @@ roadmap inferensi, dan kondisi repository saat ini.
   client pada panduan integrasi.
 - [ ] Ganti client secret dengan secret manager dan aktifkan request signature
   HMAC bila diwajibkan oleh client Odoo; HTTPS tetap wajib.
+- [ ] Aktifkan `FRONTEND_AUTH_ENABLED=true` di staging/production dan isi
+  `JWT_SECRET_KEY` melalui secret manager.
+- [ ] Uji login Vue, bearer token expired/invalid, CORS preflight, dan logout
+  pada environment staging.
+- [x] Tambahkan authorization berbasis claim `employee_id` pada endpoint
+  self-service Time Off, Overtime, dan daftar Payslip agar user tidak dapat
+  mengirim employee lain secara manual.
+- [x] Tambahkan validasi ownership untuk cancel Time Off dan download payslip
+  individual pada mode frontend JWT.
+- [x] Tambahkan claim `is_hr_admin` dari group Odoo HR Manager/Payroll Manager
+  agar HR dapat mengakses employee lain secara terkontrol.
+- [ ] Uji role HR admin pada database Odoo staging dan batasi client JWT Odoo
+  dengan scope `hr:admin`.
+- [ ] Validasi delegated user context pada mode `ODOO_API_MODE=external`;
+  token service Odoo harus tetap dapat mengotorisasi employee user Vue tanpa
+  mempercayai `employee_id` mentah dari browser.
 
 ### P1 — kualitas recognition
 

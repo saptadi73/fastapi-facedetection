@@ -9,9 +9,10 @@ Backend HR endpoints yang dipakai frontend:
 - `GET /api/v1/hr/payroll/payslips`
 - `GET /api/v1/hr/payroll/payslips/{payslip_id}/pdf`
 
-Frontend hanya memanggil FastAPI dengan header `X-API-Key`; FastAPI yang
-berkomunikasi dengan Odoo 14 melalui JWT `grt_external_api`. JWT Odoo tidak
-boleh dikirim atau disimpan di browser.
+Frontend memanggil FastAPI dengan bearer token hasil `POST /api/v1/auth/login`.
+FastAPI yang berkomunikasi dengan Odoo 14 melalui JWT `grt_external_api`; JWT
+Odoo tidak boleh dikirim atau disimpan di browser. `X-API-Key` hanya mode
+development/service-to-service.
 
 Dokumen ini adalah panduan implementasi frontend Vue.js untuk integrasi dengan FastAPI Face Attendance Service.
 
@@ -78,6 +79,12 @@ VITE_GEOLOCATION_ENABLE_HIGH_ACCURACY=true
 VITE_GEOLOCATION_TIMEOUT_MS=10000
 ```
 
+Backend harus mengizinkan origin Vite melalui `BACKEND_CORS_ORIGINS`. Untuk
+staging/production aktifkan `FRONTEND_AUTH_ENABLED=true` dan isi
+`JWT_SECRET_KEY` dengan secret panjang dari secret manager. Jangan menaruh
+`API_KEY` atau secret Odoo pada `VITE_*` karena nilai tersebut masuk ke bundle
+browser.
+
 Catatan inference:
 
 - Frontend tidak perlu mengetahui detail model ONNX.
@@ -113,8 +120,9 @@ Envelope response standar:
 
 ## 5.1 Login Odoo via FastAPI
 
-Frontend Vue mengirim username/password ke FastAPI. FastAPI meneruskan credential
-tersebut ke Odoo JSON-RPC endpoint `/web/session/authenticate`.
+Frontend Vue mengirim username/password ke FastAPI. FastAPI memvalidasinya ke
+Odoo, lalu menerbitkan access token FastAPI berumur pendek. Session Odoo tetap
+server-side.
 
 Payload:
 
@@ -134,7 +142,9 @@ Response sukses:
   "uid": 7,
   "username": "user@example.com",
   "name": "Demo User",
-  "session_id": "odoo-session-id",
+  "access_token": "fastapi-jwt",
+  "token_type": "bearer",
+  "expires_in": 1800,
   "odoo_base_url": "http://127.0.0.1:8070",
   "odoo_db": "jabung",
   "employee_resolved": true,
@@ -160,9 +170,12 @@ Catatan keamanan:
 - Jika `odoo_base_url` atau `odoo_db` tidak dikirim, FastAPI memakai nilai default dari `.env`.
 - FastAPI akan mencoba mencari `hr.employee` berdasarkan `res.users.id` atau email login.
 - Jika ditemukan, FastAPI membuat/memperbarui mapping lokal di `face_employee_map`.
+- FastAPI juga memeriksa group Odoo HR Manager/Payroll Manager dan menyimpan
+  hasilnya sebagai claim `is_hr_admin` pada JWT.
 - Foto enrollment/template tetap direlasikan ke employee, tetapi mapping tersebut menyimpan `odoo_user_id` dan `login_email` sebagai relasi ke user login.
 - Gunakan HTTPS untuk frontend ke FastAPI dan FastAPI ke Odoo.
-- Simpan `session_id` hanya jika memang diperlukan frontend; perlakukan seperti secret.
+- Simpan access token secara aman; kirim pada setiap endpoint protected sebagai
+  `Authorization: Bearer <access_token>`. Saat 401, arahkan user login ulang.
 
 ## 6. Alur Enrollment di Frontend
 
@@ -174,6 +187,23 @@ Catatan keamanan:
 6. Jika accepted mencukupi, panggil `enroll/finish`.
 
 Jika aplikasi dipakai untuk self-service attendance, employee sebaiknya diambil dari hasil login (`data.employee.id`), bukan dipilih bebas oleh user. Pilihan employee bebas hanya cocok untuk mode admin/HR enrollment.
+
+Untuk modul Time Off, Overtime, dan Payroll, frontend menggunakan employee dari
+hasil login. Backend memvalidasi `employee_id` terhadap claim JWT dan menolak
+akses ke employee lain dengan HTTP 403. Jangan menyediakan input employee bebas
+di halaman self-service; selector employee hanya untuk UI HR/admin setelah
+otorisasi role tersedia.
+
+Cancel Time Off dan download PDF Payslip juga diverifikasi terhadap record milik
+employee pada token sebelum diteruskan ke Odoo. Akses lintas employee menunggu
+role HR admin; token dengan claim `is_hr_admin=true` dapat mengakses employee
+lain sesuai scope endpoint Odoo.
+
+Untuk mode external JWT, client FastAPI di Odoo juga harus memiliki scope
+`hr:admin`. Scope ini hanya diberikan kepada client backend yang dipercaya,
+bukan kepada browser atau user frontend. Sebelum production, lakukan staging
+ test untuk memastikan delegated user context dari login Odoo tetap diterapkan
+ saat FastAPI memanggil endpoint external API menggunakan service client.
 
 Data penting dari `enroll/sample` response:
 
@@ -223,6 +253,7 @@ Payload attendance yang direkomendasikan dari frontend:
 
 ```json
 {
+  "event_id": "7f6e1c42-8c3c-4ef7-9c8d-6d0f7c8f1e1a",
   "device_code": "CAM-001",
   "image_base64": "...",
   "latitude": -6.1753924,
@@ -231,6 +262,10 @@ Payload attendance yang direkomendasikan dari frontend:
   "gps_provider": "browser"
 }
 ```
+
+Buat satu `event_id` UUID sebelum request check-in/checkout pertama dan pakai
+nilai yang sama saat retry. Backend/Odoo memakainya sebagai idempotency key
+agar retry jaringan tidak membuat attendance ganda.
 
 Contoh field response attendance yang harus di-handle frontend:
 

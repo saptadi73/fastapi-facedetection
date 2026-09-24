@@ -11,6 +11,7 @@ from models.face_attendance import FaceEmployeeMap
 from schemas.auth import LoginRequest
 from services.odoo_service import odoo_service
 from supports import error_response, success_response
+from supports.security import create_frontend_access_token
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Auth"])
 
@@ -40,6 +41,14 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             login_email=result.username or payload.username,
         )
 
+    access_token, expires_in = create_frontend_access_token(
+        username=result.username or payload.username,
+        uid=result.uid,
+        employee=result.employee,
+        employee_map_id=employee_map.id if employee_map else None,
+        is_hr_admin=result.is_hr_admin,
+    )
+
     return success_response(
         message="Login successful",
         code="LOGIN_SUCCESS",
@@ -47,13 +56,16 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             "uid": result.uid,
             "username": result.username,
             "name": result.name,
-            "session_id": result.session_id,
+            "access_token": access_token,
+            "token_type": "bearer",
+            "expires_in": expires_in,
             "odoo_base_url": payload.odoo_base_url,
             "odoo_db": payload.odoo_db,
             "user_context": result.user_context,
             "employee": result.employee,
             "employee_map_id": employee_map.id if employee_map else None,
             "employee_resolved": employee_map is not None,
+            "is_hr_admin": result.is_hr_admin,
             "employee_error": result.employee_error,
         },
     )

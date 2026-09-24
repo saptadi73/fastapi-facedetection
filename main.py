@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
 from fastapi import Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
@@ -85,6 +86,19 @@ def _retry_failed_syncs_once() -> None:
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 register_exception_handlers(app)
+
+cors_origins = [
+    origin.strip()
+    for origin in settings.backend_cors_origins.split(",")
+    if origin.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.middleware("http")

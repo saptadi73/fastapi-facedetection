@@ -14,7 +14,9 @@ class LoginResponseData(BaseModel):
     uid: int
     username: str
     name: Optional[str] = None
-    session_id: Optional[str] = None
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
     odoo_base_url: Optional[str] = None
     odoo_db: Optional[str] = None
     user_context: dict

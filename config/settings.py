@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     odoo_retry_interval_seconds: int = 300
     odoo_retry_batch_size: int = 20
     api_key: str = ""
+    frontend_auth_enabled: bool = False
+    jwt_secret_key: str = "change-me-in-production"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 30
+    backend_cors_origins: str = "http://localhost:5173,http://localhost:3000"
     odoo_attachments_enabled: bool = False
 
     face_recognition_threshold: float = 0.82

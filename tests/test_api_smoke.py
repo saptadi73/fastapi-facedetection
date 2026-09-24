@@ -103,7 +103,10 @@ def test_login_proxies_credentials_to_odoo(client, db_session, monkeypatch):
     assert payload["data"]["uid"] == 7
     assert payload["data"]["odoo_base_url"] == "http://127.0.0.1:8070"
     assert payload["data"]["odoo_db"] == "jabung"
-    assert payload["data"]["session_id"] == "session-123"
+    assert payload["data"]["token_type"] == "bearer"
+    assert payload["data"]["expires_in"] > 0
+    assert payload["data"]["access_token"]
+    assert "session_id" not in payload["data"]
     assert "password" not in payload["data"]
     assert payload["data"]["employee_resolved"] is True
     assert payload["data"]["employee"]["id"] == 11

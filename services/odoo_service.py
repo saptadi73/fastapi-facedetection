@@ -38,6 +38,7 @@ class OdooAuthResult:
     employee: Optional[dict] = None
     error: Optional[str] = None
     employee_error: Optional[str] = None
+    is_hr_admin: bool = False
 
 
 class OdooService:
@@ -146,6 +147,7 @@ class OdooService:
         session_id = response.cookies.get("session_id")
         employee: Optional[dict] = None
         employee_error: Optional[str] = None
+        is_hr_admin = False
         if session_id:
             try:
                 employee = self.find_employee_for_user(
@@ -157,6 +159,17 @@ class OdooService:
                 )
             except Exception as exc:
                 employee_error = str(exc)
+            try:
+                is_hr_admin = self._has_group(
+                    uid=int(uid),
+                    group_xmlids=("hr.group_hr_manager", "hr_payroll_community.group_hr_payroll_manager"),
+                    session_id=session_id,
+                    odoo_base_url=base_url,
+                    odoo_db=database,
+                )
+            except Exception:
+                # Group lookup must not turn a valid Odoo login into a failure.
+                is_hr_admin = False
 
         return OdooAuthResult(
             success=True,
@@ -168,7 +181,31 @@ class OdooService:
             response=body,
             employee=employee,
             employee_error=employee_error,
+            is_hr_admin=is_hr_admin,
         )
+
+    def _has_group(
+        self,
+        uid: int,
+        group_xmlids: tuple[str, ...],
+        session_id: str,
+        odoo_base_url: Optional[str] = None,
+        odoo_db: Optional[str] = None,
+    ) -> bool:
+        """Check whether the authenticated Odoo user belongs to an HR admin group."""
+        for group_xmlid in group_xmlids:
+            result = self._call_kw(
+                model="res.users",
+                method="has_group",
+                args=[[uid], group_xmlid],
+                kwargs={},
+                session_id=session_id,
+                odoo_base_url=odoo_base_url,
+                odoo_db=odoo_db,
+            )
+            if result is True:
+                return True
+        return False
 
     def find_employee_for_user(
         self,
