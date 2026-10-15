@@ -135,6 +135,9 @@ def _run_attendance(action: str, payload: AttendanceRequest, db: Session):
         event_id=payload.event_id,
         device_id=device.id if device else None,
         action=action,
+        attendance_context=payload.attendance_context,
+        visit_partner=payload.visit_partner,
+        visit_note=payload.visit_note,
         captured_at=payload.captured_at or datetime.now(timezone.utc),
         latitude=gps_payload.latitude,
         longitude=gps_payload.longitude,
@@ -201,6 +204,9 @@ def _run_attendance(action: str, payload: AttendanceRequest, db: Session):
                     "longitude": attempt.longitude,
                     "gps_accuracy_meters": attempt.gps_accuracy_meters,
                     "gps_provider": attempt.gps_provider,
+                    "attendance_context": attempt.attendance_context,
+                    "visit_partner": attempt.visit_partner,
+                    "visit_note": attempt.visit_note,
                 },
             )
             sync = OdooAttendanceSync(
@@ -227,6 +233,8 @@ def _run_attendance(action: str, payload: AttendanceRequest, db: Session):
             "attempt_id": attempt.id,
             "event_id": payload.event_id,
             "action": action,
+            "attendance_context": attempt.attendance_context,
+            "visit_partner": attempt.visit_partner,
             "matched": recognition.matched,
             "employee_id": employee_id,
             "similarity": recognition.similarity,

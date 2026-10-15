@@ -143,7 +143,9 @@ face_attendance_attempt
 10. Jika similarity memenuhi threshold:
     -   create/update attendance Odoo.
 11. Kirim GPS ke Odoo untuk validasi radius lokasi.
-12. Simpan audit log.
+12. Kirim `attendance_context` (`office` atau `customer_visit`) serta detail
+    kunjungan bila relevan.
+13. Simpan audit log.
 
 ------------------------------------------------------------------------
 
@@ -249,9 +251,14 @@ Contoh payload attendance:
     "latitude": -6.1753924,
     "longitude": 106.8271528,
     "gps_accuracy_meters": 8.75,
-    "gps_provider": "browser"
+    "gps_provider": "browser",
+    "attendance_context": "office"
 }
 ```
+
+Konteks `customer_visit` juga mengirim `visit_partner` dan `visit_note`. Odoo
+memutuskan apakah group employee boleh melewati geofence. Lihat
+`GeoFence_Group_And_Visit_Policy.md`.
 
 ## Device
 

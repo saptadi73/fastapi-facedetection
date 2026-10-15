@@ -383,6 +383,9 @@ class OdooService:
                 "longitude": context.get("longitude"),
                 "gps_accuracy_meters": context.get("gps_accuracy_meters"),
                 "gps_provider": context.get("gps_provider"),
+                "attendance_context": context.get("attendance_context", "office"),
+                "visit_partner": context.get("visit_partner"),
+                "visit_note": context.get("visit_note"),
             },
         }
         url = settings.odoo_base_url.rstrip("/") + settings.odoo_attendance_endpoint

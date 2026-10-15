@@ -15,6 +15,9 @@ class AttendanceRequest(BaseModel):
     longitude: Optional[float] = Field(default=None, ge=-180, le=180)
     gps_accuracy_meters: Optional[float] = Field(default=None, ge=0)
     gps_provider: Optional[str] = Field(default=None, max_length=32)
+    attendance_context: Literal["office", "customer_visit"] = "office"
+    visit_partner: Optional[str] = Field(default=None, max_length=255)
+    visit_note: Optional[str] = Field(default=None, max_length=2000)
 
 
 class AttendanceEventResponse(BaseModel):

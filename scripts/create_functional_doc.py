@@ -111,7 +111,33 @@ def make_doc(path: Path):
         numbered(document, item)
     document.add_paragraph('Sistem mencegah check-in ganda dan mencatat event secara idempotent agar tidak terjadi data attendance duplikat.')
 
-    heading(document, '6. Riwayat Presensi', 1)
+    heading(document, '6. Jenis Lokasi dan GeoFence', 1)
+    document.add_paragraph(
+        'Kebijakan lokasi ditentukan oleh group employee di Odoo. Presensi kantor '
+        'menggunakan Home Point group, sedangkan kunjungan pelanggan/mitra dapat '
+        'melewati radius kantor hanya untuk group yang diizinkan.'
+    )
+    table = document.add_table(rows=1, cols=3)
+    table.style = 'Table Grid'
+    for cell, text in zip(table.rows[0].cells, ('Kebijakan', 'Kantor', 'Kunjungan')):
+        cell.text = text
+    for row in [
+        ('office', 'Wajib Home Point', 'Ditolak'),
+        ('hybrid', 'Wajib Home Point', 'Diizinkan dengan nama dan catatan'),
+        ('offsite_allowed', 'Wajib Home Point', 'Diizinkan dengan nama dan catatan'),
+    ]:
+        cells = table.add_row().cells
+        for cell, text in zip(cells, row):
+            cell.text = text
+    for item in [
+        'Untuk kantor, pilih Kantor dan pastikan GPS berada dalam radius Home Point group.',
+        'Untuk visit, pilih Kunjungan lalu isi nama pelanggan/mitra dan catatan tujuan.',
+        'GPS tetap wajib untuk kunjungan agar aktivitas dapat diaudit, walaupun radius kantor tidak diterapkan.',
+        'Admin HR mengatur group pada employee dan Home Point pada menu Face Attendance di Odoo.',
+    ]:
+        bullet(document, item)
+
+    heading(document, '7. Riwayat Presensi', 1)
     for item in [
         'Buka menu Riwayat.',
         'Periksa tanggal, waktu, jenis aktivitas, status, tingkat kemiripan wajah, dan informasi GPS.',
@@ -119,7 +145,7 @@ def make_doc(path: Path):
     ]:
         bullet(document, item)
 
-    heading(document, '7. Pengajuan Cuti / Time Off', 1)
+    heading(document, '8. Pengajuan Cuti / Time Off', 1)
     for item in [
         'Buka menu Cuti.',
         'Pilih jenis cuti.',
@@ -130,7 +156,7 @@ def make_doc(path: Path):
     ]:
         numbered(document, item)
 
-    heading(document, '8. Pengajuan Lembur / Overtime', 1)
+    heading(document, '9. Pengajuan Lembur / Overtime', 1)
     for item in [
         'Buka menu Lembur.',
         'Pilih tanggal lembur.',
@@ -141,7 +167,7 @@ def make_doc(path: Path):
     ]:
         numbered(document, item)
 
-    heading(document, '9. Payslip / Slip Gaji', 1)
+    heading(document, '10. Payslip / Slip Gaji', 1)
     for item in [
         'Buka menu Gaji.',
         'Pilih periode payslip yang tersedia.',
@@ -150,7 +176,7 @@ def make_doc(path: Path):
     ]:
         numbered(document, item)
 
-    heading(document, '10. Troubleshooting Pengguna', 1)
+    heading(document, '11. Troubleshooting Pengguna', 1)
     table = document.add_table(rows=1, cols=2)
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
     table.style = 'Table Grid'
@@ -163,6 +189,7 @@ def make_doc(path: Path):
         ('Wajah tidak cocok', 'Gunakan pencahayaan cukup, lepaskan masker/kacamata gelap, dan lihat kamera secara langsung.'),
         ('Di luar radius lokasi', 'Pastikan berada di area kerja yang dikonfigurasi HR dan GPS memiliki akurasi baik.'),
         ('Data belum masuk Odoo', 'Jangan mengulang berkali-kali. Periksa Riwayat atau hubungi admin untuk pengecekan antrean sinkronisasi.'),
+        ('Kunjungan ditolak', 'Pastikan employee berada pada group hybrid/offsite_allowed dan isi nama pelanggan/mitra serta catatan kunjungan.'),
         ('Login gagal', 'Pastikan username, password, dan database benar; bila tetap gagal hubungi admin Odoo.'),
     ]
     for problem, solution in issues:
@@ -170,22 +197,23 @@ def make_doc(path: Path):
         cells[0].text = problem
         cells[1].text = solution
 
-    heading(document, '11. Panduan Admin HR', 1)
+    heading(document, '12. Panduan Admin HR', 1)
     for item in [
         'Pastikan employee Odoo memiliki user, barcode/identification ID, dan data perusahaan yang benar.',
-        'Atur lokasi attendance dan radius pada konfigurasi Face Attendance.',
+        'Buat Home Point pada Face Attendance > Locations, lalu buat group pada Face Attendance > Attendance Groups.',
+        'Pilih kebijakan group office, hybrid, atau offsite_allowed dan tetapkan group pada employee.',
         'Pastikan modul hr_attendance, hr_holidays, hr_payroll_community, grt_face_attendance_bridge, dan grt_external_api aktif.',
         'Gunakan user integrasi khusus untuk API dan jangan membagikan client secret.',
         'Periksa log api-facedetection dan Odoo jika integrasi mengalami kegagalan.',
     ]:
         bullet(document, item)
 
-    heading(document, '12. Alur Integrasi Teknis', 1)
+    heading(document, '13. Alur Integrasi Teknis', 1)
     document.add_paragraph('Alur normal aplikasi adalah:')
     for item in [
         'User login melalui frontend.',
         'Frontend mengirim permintaan ke FastAPI.',
-        'FastAPI memverifikasi wajah dan GPS.',
+        'FastAPI memverifikasi wajah dan meneruskan konteks serta GPS.',
         'FastAPI meminta JWT ke Odoo External API Gateway.',
         'FastAPI mengirim event attendance atau permintaan HR ke Odoo.',
         'Odoo memvalidasi scope, user, employee, dan aturan HR.',
@@ -193,7 +221,7 @@ def make_doc(path: Path):
     ]:
         numbered(document, item)
 
-    heading(document, '13. Keamanan dan Privasi', 1)
+    heading(document, '14. Keamanan dan Privasi', 1)
     bullet(document, 'Jangan membagikan password Odoo atau client secret API.')
     bullet(document, 'Gunakan perangkat pribadi yang aman dan browser yang diperbarui.')
     bullet(document, 'Data wajah dan presensi hanya digunakan untuk kebutuhan operasional HR sesuai kebijakan perusahaan.')

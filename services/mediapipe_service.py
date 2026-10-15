@@ -37,6 +37,11 @@ class MediaPipeService:
             self._cascade = self._load_cascade()
         elif provider == "mediapipe":
             self._mediapipe_detector, self._mediapipe_mesh = self._load_mediapipe()
+            # MediaPipe 0.10.35 removed the legacy ``mp.solutions`` API. Keep
+            # enrollment/attendance available with the tested CPU fallback
+            # instead of silently returning face_count=0 for every image.
+            if self._mediapipe_detector is None:
+                self._cascade = self._load_cascade()
 
     def _load_cascade(self):
         try:
@@ -86,7 +91,7 @@ class MediaPipeService:
 
     def _detect_mediapipe(self, image: Image.Image) -> FaceAnalysis:
         if self._mediapipe_detector is None:
-            return FaceAnalysis(face_count=0, confidence=0.0, yaw=0.0, pitch=0.0, roll=0.0)
+            return self._detect_opencv(image)
         import numpy as np
 
         pixels = np.asarray(image.convert("RGB"))

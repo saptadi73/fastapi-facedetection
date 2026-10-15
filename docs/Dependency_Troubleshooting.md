@@ -70,3 +70,41 @@ Implementasi terbaru menyimpan foto enrollment ke tiga target sekaligus:
 
 Metadata disimpan di tabel `face_sample_storage` (migrasi
 `20260708_0003_create_face_sample_storage_table.py`).
+# Enrollment gagal dengan `INVALID_FACE_COUNT` dan `LOW_DETECTION_CONFIDENCE`
+
+Jika `face_count=0` untuk semua foto meskipun sample secara visual berisi satu
+wajah, periksa versi MediaPipe. MediaPipe `0.10.35` tidak menyediakan lagi API
+legacy `mp.solutions` yang dipakai adapter lama. Production menggunakan OpenCV
+Haar Cascade sebagai fallback detector CPU yang tervalidasi pada sample pilot.
+
+Periksa:
+
+```bash
+curl -fsS https://hris.kanjabung.web.id/health
+grep '^FACE_DETECTOR_PROVIDER=' /var/www/fastapi_app/.env
+```
+
+Nilai production yang digunakan adalah `FACE_DETECTOR_PROVIDER=opencv`.
+Pastikan wajah memenuhi area panduan, hanya satu wajah terlihat, dan gambar
+tidak tertutup objek. Setelah perubahan detector, restart service dan ulangi
+sample; enrollment lama yang masih `in_progress` dapat dilanjutkan.
+
+# Enrollment gagal dengan `INVALID_FACE_COUNT` dan `LOW_DETECTION_CONFIDENCE`
+
+Jika `face_count=0` untuk semua foto meskipun sample secara visual berisi satu
+wajah, periksa versi MediaPipe. MediaPipe `0.10.35` tidak menyediakan lagi API
+legacy `mp.solutions` yang dipakai adapter lama. Production menggunakan OpenCV
+Haar Cascade sebagai fallback detector CPU yang tervalidasi pada sample pilot.
+
+Periksa:
+
+```bash
+curl -fsS https://hris.kanjabung.web.id/health
+grep '^FACE_DETECTOR_PROVIDER=' /var/www/fastapi_app/.env
+```
+
+Nilai production yang digunakan adalah `FACE_DETECTOR_PROVIDER=opencv`.
+Pastikan wajah memenuhi area panduan, hanya satu wajah terlihat, dan gambar
+tidak tertutup objek. Setelah perubahan detector, restart service dan ulangi
+sample; enrollment lama yang masih `in_progress` dapat dilanjutkan.
+

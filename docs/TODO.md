@@ -41,6 +41,10 @@ roadmap inferensi, dan kondisi repository saat ini.
 - [x] Tambahkan jalur FastAPI ke endpoint bridge dengan API key. Jalur JSON-RPC
   langsung tetap menjadi fallback staging ketika API key bridge belum diisi.
 - [ ] Deploy dan instal `grt_face_attendance_bridge` pada database staging.
+- [x] Implementasikan kebijakan group `office`, `hybrid`, dan `offsite_allowed`
+  pada source modul Odoo, termasuk Home Point group dan konteks kunjungan.
+- [x] Upgrade modul kebijakan group pada Odoo production dan verifikasi tabel
+  relasi Home Point/group serta kolom konteks kunjungan.
 - [ ] Isi lokasi/radius, toleransi akurasi GPS, URL FastAPI, dan API key dari
   Odoo Settings; gunakan secret yang sama pada `ODOO_ATTENDANCE_API_KEY`.
 - [ ] Uji worker retry terhadap Odoo staging dengan timeout/network failure.
@@ -98,6 +102,19 @@ roadmap inferensi, dan kondisi repository saat ini.
   employee/device/site; baseline HTTP metrics sudah tersedia.
 - [ ] Tambahkan retention policy untuk foto/embedding dan audit akses biometric.
 - [ ] Jalankan UAT lintas device/site serta benchmark p95 sebelum rollout.
+
+## Deployment 2026-10-15
+
+- [x] FastAPI production di-migrate ke revision `20261015_0007` dan service
+  `api-facedetection` sehat.
+- [x] Frontend production dibuild dengan type-check dan dipublikasikan.
+- [x] Dokumentasi fungsional DOCX, teknikal, runbook, dan helper dipublikasikan
+  ke server FastAPI/frontend.
+- [x] Memperbaiki detector enrollment production: MediaPipe legacy API tidak
+  tersedia pada versi 0.10.35, sehingga OpenCV fallback diaktifkan dan sample
+  valid teruji menghasilkan `face_count=1`, confidence `0.85`.
+- [x] Odoo production upgraded: modul `grt_face_attendance_bridge` berstatus
+  `installed`, service aktif, dan endpoint `/web/login` mengembalikan HTTP 200.
 
 ## Catatan konfigurasi
 
