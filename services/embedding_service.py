@@ -82,6 +82,49 @@ class EmbeddingService:
         self._onnx_input_name = settings.face_onnx_input_name or session_inputs[0].name
         self._onnx_output_name = settings.face_onnx_output_name or session_outputs[0].name
 
+    def _crop_face(self, image: Image.Image) -> Image.Image:
+        """Crop the largest detected face before creating an embedding.
+
+        Enrollment and attendance must embed the same semantic region.  Using
+        the complete camera frame makes the embedding depend heavily on the
+        background, distance to the camera, and framing.  Haar detection is
+        also used by the quality gate, so this keeps preprocessing consistent
+        without introducing a second detector dependency.
+        """
+        try:
+            import cv2
+            import numpy as np
+
+            cascade_path = settings.face_detector_cascade_path
+            if not cascade_path:
+                cascade_path = str(Path(cv2.data.haarcascades) / "haarcascade_frontalface_default.xml")
+            cascade = cv2.CascadeClassifier(cascade_path)
+            if cascade.empty():
+                return image
+
+            pixels = np.asarray(image.convert("RGB"))
+            gray = cv2.cvtColor(pixels, cv2.COLOR_RGB2GRAY)
+            faces = cascade.detectMultiScale(
+                gray,
+                scaleFactor=1.1,
+                minNeighbors=5,
+                minSize=(60, 60),
+            )
+            if len(faces) == 0:
+                return image
+
+            x, y, width, height = max(faces, key=lambda face: int(face[2]) * int(face[3]))
+            margin = int(max(width, height) * 0.25)
+            left = max(0, int(x) - margin)
+            top = max(0, int(y) - margin)
+            right = min(pixels.shape[1], int(x + width) + margin)
+            bottom = min(pixels.shape[0], int(y + height) + margin)
+            return Image.fromarray(pixels[top:bottom, left:right]).convert("RGB")
+        except Exception:
+            # Embedding remains available if the optional detector cannot be
+            # loaded; the quality gate still reports the underlying issue.
+            return image
+
     def _onnx_feature_vector(self, image: Image.Image) -> list[float]:
         if not self._can_use_onnx():
             raise RuntimeError(self._onnx_error or "ONNX embedding provider is unavailable")
@@ -89,7 +132,7 @@ class EmbeddingService:
         import numpy as np
 
         input_size = settings.face_onnx_input_size
-        fitted = ImageOps.fit(image, (input_size, input_size), method=Image.Resampling.BILINEAR)
+        fitted = ImageOps.fit(self._crop_face(image), (input_size, input_size), method=Image.Resampling.BILINEAR)
         array = np.asarray(fitted, dtype=np.float32)
         array = (array - 127.5) / 128.0
         array = np.transpose(array, (2, 0, 1))[None, :, :, :]
@@ -99,7 +142,7 @@ class EmbeddingService:
         return embedding.tolist()
 
     def _image_feature_vector(self, image: Image.Image) -> list[float]:
-        fitted = ImageOps.fit(image, (32, 32), method=Image.Resampling.BILINEAR)
+        fitted = ImageOps.fit(self._crop_face(image), (32, 32), method=Image.Resampling.BILINEAR)
         gray = fitted.convert("L")
         equalized = ImageOps.equalize(gray)
         stat = ImageStat.Stat(equalized)

@@ -85,6 +85,19 @@ grep '^FACE_DETECTOR_PROVIDER=' /var/www/fastapi_app/.env
 ```
 
 Nilai production yang digunakan adalah `FACE_DETECTOR_PROVIDER=opencv`.
+
+## Wajah benar tetapi selalu tidak dikenal
+
+Pastikan enrollment dan presensi memakai preprocessing embedding yang sama.
+Production memotong wajah terbesar dengan OpenCV sebelum embedding ONNX dibuat.
+Setelah mengubah preprocessing, template lama tidak boleh langsung dipakai;
+regenerasi template dari sample accepted dan rebuild face index menggunakan
+runbook deployment. Verifikasi `GET /health` bahwa `embedding_provider` adalah
+`onnx` dan jumlah `face_index.entries` sesuai template aktif.
+
+Jangan menurunkan `FACE_RECOGNITION_THRESHOLD` tanpa menguji false-positive.
+Threshold adalah kontrol keamanan presensi; kalibrasi harus menggunakan sample
+genuine dan impostor yang memadai.
 Pastikan wajah memenuhi area panduan, hanya satu wajah terlihat, dan gambar
 tidak tertutup objek. Setelah perubahan detector, restart service dan ulangi
 sample; enrollment lama yang masih `in_progress` dapat dilanjutkan.

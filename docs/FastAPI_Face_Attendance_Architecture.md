@@ -311,6 +311,19 @@ Jika `FACE_DETECTOR_PROVIDER=mediapipe`, Face Mesh digunakan untuk menghitung
 estimasi pose dari landmark wajah. Request di luar toleransi ditolak dengan
 reason code `YAW_OUT_OF_RANGE`, `PITCH_OUT_OF_RANGE`, atau `ROLL_OUT_OF_RANGE`.
 
+## Preprocessing embedding
+
+Sebelum embedding ONNX dibuat, service mendeteksi wajah terbesar dengan
+OpenCV Haar cascade lalu memotong area wajah dengan margin. Enrollment dan
+presensi memakai preprocessing yang sama agar latar belakang, jarak kamera,
+dan framing tidak mendominasi kemiripan. Jika cascade tidak tersedia, service
+memakai frame asli sebagai fallback dan status detector tetap terlihat pada
+health check.
+
+Setiap perubahan preprocessing mewajibkan regenerasi template dari sample
+enrollment yang berstatus accepted dan rebuild face index. Template lama harus
+dibackup terlebih dahulu.
+
 ------------------------------------------------------------------------
 
 # Integrasi Odoo
