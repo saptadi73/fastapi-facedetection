@@ -48,7 +48,8 @@ Bagian yang sudah tersedia di repository `fastapi-fd`:
 
 Bagian yang sudah tersedia pada custom Odoo `grt_face_attendance_bridge`:
 
-- model master lokasi attendance dan assignment lokasi per employee
+- model master Home Point yang menyatukan koordinat, radius, policy, dan
+  assignment employee; model group/location lama tetap dibaca sebagai fallback
 - validasi radius serta toleransi akurasi GPS
 - endpoint/controller Odoo ber-API-key yang memutuskan accepted/rejected
 - idempotency event dan penyimpanan audit pada attendance/event log

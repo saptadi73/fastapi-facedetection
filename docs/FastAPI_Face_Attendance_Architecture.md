@@ -258,7 +258,10 @@ Contoh payload attendance:
 
 Konteks `customer_visit` juga mengirim `visit_partner` dan `visit_note`. Odoo
 memutuskan apakah group employee boleh melewati geofence. Lihat
-`GeoFence_Group_And_Visit_Policy.md`.
+`GeoFence_Group_And_Visit_Policy.md`. Konfigurasi baru memakai relasi
+`hr.employee.face_attendance_home_point_id`; Home Point menyimpan policy,
+koordinat, radius, dan daftar employee. Relasi group/location lama tetap
+didukung untuk kompatibilitas migrasi.
 
 ## Device
 

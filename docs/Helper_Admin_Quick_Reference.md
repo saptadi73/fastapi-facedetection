@@ -2,9 +2,10 @@
 
 ## Employee tidak bisa presensi kantor
 
-1. Pastikan employee aktif dan memiliki Face Attendance Group.
-2. Pastikan group aktif, perusahaan sesuai, dan memiliki Home Point aktif.
-3. Periksa koordinat, radius, dan toleransi akurasi Home Point.
+1. Pastikan employee aktif dan memiliki **Home Point**.
+2. Pastikan Home Point aktif dan perusahaan sesuai.
+3. Periksa policy, koordinat, radius, dan toleransi akurasi Home Point.
+4. Attendance Groups hanya dipakai untuk kompatibilitas data lama.
 4. Minta pengguna mengambil lokasi ulang di area terbuka.
 
 ## Sales presensi saat visit

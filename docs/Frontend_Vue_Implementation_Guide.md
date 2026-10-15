@@ -232,6 +232,11 @@ Catatan penting:
 
 ## 7. Alur Attendance di Frontend
 
+Konfigurasi Home Point dan policy berada di Odoo. Frontend tidak mengambil atau
+menyimpan koordinat Home Point dan tidak menghitung geofence sendiri. Backend
+Odoo memilih Home Point berdasarkan employee yang login. Perubahan menu Odoo
+dari Location/Group menjadi Home Points tidak mengubah kontrak frontend.
+
 1. User pilih aksi checkin/checkout.
 2. Ambil koordinat GPS via browser geolocation API.
 3. Capture satu frame berkualitas baik.
@@ -242,6 +247,7 @@ Catatan penting:
    - similarity
    - status
   - status lokasi jika dikembalikan sistem Odoo/backend
+  - `location_validation.location_name`, jarak, dan radius jika tersedia
 
 Rekomendasi flow bisnis frontend:
 
@@ -513,6 +519,11 @@ Frontend cukup memanfaatkan field tersebut untuk:
 - menampilkan status attachment Odoo (`odoo_attachment_id`)
 - menampilkan bukti koordinat yang dikirim saat attendance
 - menyiapkan UX untuk hasil validasi radius dari Odoo pada tahap integrasi berikutnya
+
+Konfigurasi terbaru tidak memerlukan perubahan komponen Vue: pilihan **Kantor**
+dan **Kunjungan** tetap dikirim melalui `attendance_context`. Karyawan sales
+yang memakai Home Point policy `hybrid` atau `offsite_allowed` dapat mengirim
+`visit_partner` dan `visit_note`; validasi final tetap dilakukan Odoo.
 
 ## 19. Status Implementasi Backend Saat Ini
 

@@ -44,7 +44,9 @@ Migration `20261015_0007` menambah konteks attendance dan detail kunjungan.
 - OpenAPI AttendanceRequest memiliki `attendance_context`, `visit_partner`, dan `visit_note`.
 - Bundle frontend terbaru memuat pilihan Kantor/Kunjungan.
 - Log Odoo tidak menunjukkan error model/view.
-- Admin dapat membuat group dan Home Point.
+- Admin dapat membuat Home Point terpadu; policy dan employee ditetapkan dari
+  form Home Point. Menu Attendance Groups lama tetap tersedia hanya untuk
+  migrasi/kompatibilitas.
 
 ## Rollback
 
