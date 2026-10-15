@@ -60,7 +60,9 @@ def make_doc(path: Path):
 
     heading(document, '2. Persiapan Pengguna', 1)
     for item in [
-        'Gunakan akun Odoo yang aktif dan terhubung dengan data karyawan.',
+        'User wajib memiliki akun/user Odoo yang aktif.',
+        'Akun Odoo wajib terhubung dengan data employee/karyawan di Odoo.',
+        'Foto wajah wajib di-upload/daftarkan terlebih dahulu melalui menu Wajah sebelum presensi.',
         'Gunakan browser modern seperti Chrome, Edge, atau Safari versi terbaru.',
         'Izinkan kamera ketika diminta oleh browser.',
         'Izinkan lokasi/GPS ketika diminta oleh browser.',
@@ -75,8 +77,8 @@ def make_doc(path: Path):
     numbered(document, 'Tekan Login.')
     document.add_paragraph('Setelah berhasil, dashboard menampilkan identitas pengguna, status presensi, dan akses cepat ke cuti serta lembur.')
 
-    heading(document, '4. Pendaftaran Wajah', 1)
-    document.add_paragraph('Pendaftaran wajah dilakukan satu kali atau diulang apabila wajah berubah secara signifikan.')
+    heading(document, '4. Upload dan Pendaftaran Wajah', 1)
+    document.add_paragraph('Upload/pendaftaran foto wajah adalah prasyarat wajib. User tidak dapat melakukan presensi sebelum proses ini selesai dan status wajah aktif.')
     for item in [
         'Buka menu Wajah.',
         'Tekan mulai pendaftaran.',
