@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     face_max_roll: float = 30.0
     face_detector_provider: str = "placeholder"
     face_detector_cascade_path: str = ""
+    face_alignment_model_path: str = "models/face_detection_yunet_2023mar.onnx"
     face_embedding_provider: str = "visual"
     face_onnx_model_path: str = ""
     face_onnx_input_size: int = 112

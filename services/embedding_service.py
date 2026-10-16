@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import math
 from pathlib import Path
+from threading import Lock
 from typing import Any, Optional
 
 from config.settings import settings
@@ -15,6 +16,9 @@ class EmbeddingService:
         self._onnx_input_name: Optional[str] = None
         self._onnx_output_name: Optional[str] = None
         self._onnx_error: Optional[str] = None
+        self._face_detector_yn: Any = None
+        self._face_alignment_error: Optional[str] = None
+        self._face_detector_lock = Lock()
 
     def generate_embedding(self, image_bytes: bytes, dim: int = 0) -> list[float]:
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
@@ -34,12 +38,19 @@ class EmbeddingService:
         configured = settings.face_embedding_provider.strip().lower()
         onnx_ready = self._can_use_onnx() if configured in {"onnx", "auto"} else False
         ready = onnx_ready if configured == "onnx" else True
+        alignment_model = self._resolve_alignment_model()
         return {
             "configured_provider": configured,
             "active_provider": self.provider_name(),
             "ready": ready,
             "onnx_ready": onnx_ready,
             "onnx_error": self._onnx_error,
+            "face_alignment": {
+                "configured": True,
+                "model_exists": alignment_model.is_file(),
+                "active": self._load_face_detector_yn() is not None,
+                "error": self._face_alignment_error,
+            },
         }
 
     def _generate_vector(self, image: Image.Image) -> list[float]:
@@ -82,47 +93,81 @@ class EmbeddingService:
         self._onnx_input_name = settings.face_onnx_input_name or session_inputs[0].name
         self._onnx_output_name = settings.face_onnx_output_name or session_outputs[0].name
 
-    def _crop_face(self, image: Image.Image) -> Image.Image:
-        """Crop the largest detected face before creating an embedding.
+    def _resolve_alignment_model(self) -> Path:
+        model_path = Path(settings.face_alignment_model_path)
+        return model_path if model_path.is_absolute() else Path(settings.base_dir) / model_path
 
-        Enrollment and attendance must embed the same semantic region.  Using
-        the complete camera frame makes the embedding depend heavily on the
-        background, distance to the camera, and framing.  Haar detection is
-        also used by the quality gate, so this keeps preprocessing consistent
-        without introducing a second detector dependency.
-        """
+    def _load_face_detector_yn(self):
+        if self._face_detector_yn is not None:
+            return self._face_detector_yn
+        try:
+            import cv2
+            if not hasattr(cv2, "FaceDetectorYN_create"):
+                raise RuntimeError("OpenCV FaceDetectorYN is unavailable")
+            model_path = self._resolve_alignment_model()
+            if not model_path.is_file():
+                raise FileNotFoundError(f"YuNet alignment model not found: {model_path}")
+            self._face_detector_yn = cv2.FaceDetectorYN_create(
+                str(model_path), "", (320, 320), 0.6, 0.3, 5000
+            )
+            return self._face_detector_yn
+        except Exception as exc:
+            self._face_alignment_error = str(exc)
+            return None
+
+    def _crop_face(self, image: Image.Image) -> Image.Image:
+        """Align a face to the canonical 112x112 ArcFace landmark template."""
         try:
             import cv2
             import numpy as np
 
+            rgb = np.asarray(image.convert("RGB"))
+            bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+            detector = self._load_face_detector_yn()
+            if detector is not None:
+                with self._face_detector_lock:
+                    detector.setInputSize((bgr.shape[1], bgr.shape[0]))
+                    _, faces = detector.detect(bgr)
+                if faces is not None and len(faces):
+                    face = max(faces, key=lambda row: float(row[2] * row[3]))
+                    landmarks = np.asarray(face[4:14], dtype=np.float32).reshape(5, 2)
+                    reference = np.array([
+                        [38.2946, 51.6963], [73.5318, 51.5014],
+                        [56.0252, 71.7366], [41.5493, 92.3655],
+                        [70.7299, 92.2041],
+                    ], dtype=np.float32)
+                    target_size = int(settings.face_onnx_input_size)
+                    reference *= target_size / 112.0
+                    transform, _ = cv2.estimateAffinePartial2D(
+                        landmarks, reference, method=cv2.LMEDS
+                    )
+                    if transform is not None and np.isfinite(transform).all():
+                        aligned_bgr = cv2.warpAffine(
+                            bgr, transform, (target_size, target_size),
+                            flags=cv2.INTER_LINEAR,
+                            borderMode=cv2.BORDER_CONSTANT,
+                            borderValue=(0, 0, 0),
+                        )
+                        aligned_rgb = cv2.cvtColor(aligned_bgr, cv2.COLOR_BGR2RGB)
+                        self._face_alignment_error = None
+                        return Image.fromarray(aligned_rgb)
+
+            # Safe fallback if YuNet cannot locate landmarks: use a tight Haar
+            # crop rather than embedding the full camera frame/background.
             cascade_path = settings.face_detector_cascade_path
             if not cascade_path:
                 cascade_path = str(Path(cv2.data.haarcascades) / "haarcascade_frontalface_default.xml")
             cascade = cv2.CascadeClassifier(cascade_path)
-            if cascade.empty():
-                return image
-
-            pixels = np.asarray(image.convert("RGB"))
-            gray = cv2.cvtColor(pixels, cv2.COLOR_RGB2GRAY)
-            faces = cascade.detectMultiScale(
-                gray,
-                scaleFactor=1.1,
-                minNeighbors=5,
-                minSize=(60, 60),
-            )
-            if len(faces) == 0:
-                return image
-
-            x, y, width, height = max(faces, key=lambda face: int(face[2]) * int(face[3]))
-            margin = int(max(width, height) * 0.25)
-            left = max(0, int(x) - margin)
-            top = max(0, int(y) - margin)
-            right = min(pixels.shape[1], int(x + width) + margin)
-            bottom = min(pixels.shape[0], int(y + height) + margin)
-            return Image.fromarray(pixels[top:bottom, left:right]).convert("RGB")
-        except Exception:
-            # Embedding remains available if the optional detector cannot be
-            # loaded; the quality gate still reports the underlying issue.
+            gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+            faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60))
+            if len(faces):
+                x, y, width, height = max(faces, key=lambda box: int(box[2]) * int(box[3]))
+                margin = int(max(width, height) * 0.10)
+                crop = rgb[max(0, y-margin):min(rgb.shape[0], y+height+margin), max(0, x-margin):min(rgb.shape[1], x+width+margin)]
+                return Image.fromarray(crop)
+            return image
+        except Exception as exc:
+            self._face_alignment_error = str(exc)
             return image
 
     def _onnx_feature_vector(self, image: Image.Image) -> list[float]:

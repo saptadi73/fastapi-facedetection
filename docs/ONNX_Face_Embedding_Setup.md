@@ -40,6 +40,7 @@ FACE_ONNX_MODEL_PATH=models/face_embedding.onnx
 FACE_ONNX_INPUT_SIZE=112
 FACE_ONNX_EXECUTION_PROVIDERS=CPUExecutionProvider
 FACE_RECOGNITION_THRESHOLD=0.82
+FACE_ALIGNMENT_MODEL_PATH=models/face_detection_yunet_2023mar.onnx
 ```
 
 ## 3. Model
@@ -54,11 +55,17 @@ models/face_embedding.onnx
 
 Pipeline preprocessing saat ini:
 
-- input RGB
-- resize/crop tengah ke `FACE_ONNX_INPUT_SIZE`
+- deteksi wajah terbesar dan lima landmark dengan YuNet
+- affine alignment landmark ke geometri ArcFace; Haar crop rapat sebagai fallback
+- konversi RGB dan resize ke `FACE_ONNX_INPUT_SIZE`
 - normalisasi `(pixel - 127.5) / 128.0`
 - format tensor `NCHW`
 - output pertama diratakan dan dinormalisasi L2
+
+File YuNet default: `models/face_detection_yunet_2023mar.onnx` dari OpenCV Zoo
+(lisensi MIT). Health check menampilkan kesiapan di
+`inference.embedding.face_alignment`; production ONNX sebaiknya menunjukkan
+`active=true` dan `error=null`.
 
 Jika model yang dipilih membutuhkan preprocessing berbeda, sesuaikan
 `services/embedding_service.py`.
@@ -68,7 +75,9 @@ Hal yang tidak dilakukan otomatis:
 - Upload 5-10 foto employee tidak mengubah file `.onnx`.
 - Enrollment hanya membuat embedding/template baru di tabel `face_template`.
 - Model `.onnx` hanya berubah jika file model diganti manual atau melalui proses training/fine-tuning terpisah.
-- Setelah file `.onnx` diganti, semua employee harus enrollment ulang.
+- Setelah model embedding atau preprocessing alignment diganti, regenerasi semua
+  template aktif dari sample accepted dan rebuild index. Backup template dan
+  face index sebelum migrasi; jangan campur embedding dari preprocessing berbeda.
 
 Lisensi:
 

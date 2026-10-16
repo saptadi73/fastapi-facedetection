@@ -316,12 +316,18 @@ reason code `YAW_OUT_OF_RANGE`, `PITCH_OUT_OF_RANGE`, atau `ROLL_OUT_OF_RANGE`.
 
 ## Preprocessing embedding
 
-Sebelum embedding ONNX dibuat, service mendeteksi wajah terbesar dengan
-OpenCV Haar cascade lalu memotong area wajah dengan margin. Enrollment dan
-presensi memakai preprocessing yang sama agar latar belakang, jarak kamera,
-dan framing tidak mendominasi kemiripan. Jika cascade tidak tersedia, service
-memakai frame asli sebagai fallback dan status detector tetap terlihat pada
-health check.
+Sebelum embedding ONNX dibuat, service mendeteksi wajah terbesar dengan YuNet,
+mengambil lima landmark, lalu melakukan affine alignment ke geometri wajah
+ArcFace 112x112. Enrollment dan presensi menggunakan jalur yang sama agar
+perbedaan sudut, skala, dan framing tidak mendominasi kemiripan. Jika YuNet
+tidak tersedia atau deteksi gagal, backend memakai crop Haar bermargin 10%;
+health check menampilkan kesiapan model alignment dan error yang terjadi.
+
+Model default berada di `models/face_detection_yunet_2023mar.onnx` dan dapat
+diubah melalui `FACE_ALIGNMENT_MODEL_PATH`. Perubahan preprocessing mewajibkan
+backup dan regenerasi seluruh template aktif dari sampel accepted, diikuti
+rebuild face index. Jangan mengubah threshold sebagai pengganti alignment;
+threshold perlu tetap dikalibrasi terhadap data genuine dan impostor.
 
 Setiap perubahan preprocessing mewajibkan regenerasi template dari sample
 enrollment yang berstatus accepted dan rebuild face index. Template lama harus

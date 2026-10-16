@@ -89,11 +89,21 @@ Nilai production yang digunakan adalah `FACE_DETECTOR_PROVIDER=opencv`.
 ## Wajah benar tetapi selalu tidak dikenal
 
 Pastikan enrollment dan presensi memakai preprocessing embedding yang sama.
-Production memotong wajah terbesar dengan OpenCV sebelum embedding ONNX dibuat.
+Production mendeteksi lima landmark wajah dengan YuNet lalu menyelaraskannya ke
+template geometri ArcFace 112x112 sebelum embedding ONNX dibuat. Jika YuNet/model
+tidak tersedia, backend memakai crop Haar yang lebih rapat sebagai fallback;
+health check menampilkan `embedding.face_alignment.active` dan error bila ada.
+
 Setelah mengubah preprocessing, template lama tidak boleh langsung dipakai;
-regenerasi template dari sample accepted dan rebuild face index menggunakan
-runbook deployment. Verifikasi `GET /health` bahwa `embedding_provider` adalah
-`onnx` dan jumlah `face_index.entries` sesuai template aktif.
+backup template/index, regenerasi template dari sample accepted, lalu rebuild
+face index menggunakan runbook deployment. Verifikasi `GET /health` bahwa
+`embedding_provider` adalah `onnx`, `embedding.face_alignment.active=true`, dan
+jumlah `face_index.entries` sesuai template aktif.
+
+Model YuNet `face_detection_yunet_2023mar.onnx` perlu ditempatkan di
+`models/face_detection_yunet_2023mar.onnx` (atau lokasi yang ditentukan melalui
+`FACE_ALIGNMENT_MODEL_PATH`). Model resminya tersedia di [OpenCV Zoo](https://github.com/opencv/opencv_zoo/blob/main/models/face_detection_yunet/README.md)
+dan berlisensi MIT.
 
 Jangan menurunkan `FACE_RECOGNITION_THRESHOLD` tanpa menguji false-positive.
 Threshold adalah kontrol keamanan presensi; kalibrasi harus menggunakan sample
